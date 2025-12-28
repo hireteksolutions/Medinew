@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { patientService, authService } from '../../services/api';
+import { patientService, authService, fileService } from '../../services/api';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { GENDERS, GENDER_OPTIONS, BLOOD_GROUP_OPTIONS, TOAST_MESSAGES } from '../../constants';
 import DatePickerComponent from '../../components/common/DatePicker';
 import { format } from 'date-fns';
+import { Camera, X, Upload, User } from 'lucide-react';
+import { useLoader } from '../../context/LoaderContext';
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
+  const { showLoader, hideLoader } = useLoader();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [profileImage, setProfileImage] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const { register, handleSubmit, setValue, watch } = useForm();
 
@@ -26,6 +31,7 @@ export default function Profile() {
       ]);
       setProfile(patientRes.data);
       const userData = userRes.data.user;
+      setProfileImage(userData.profileImage || '');
       setValue('firstName', userData.firstName);
       setValue('lastName', userData.lastName);
       setValue('email', userData.email);
@@ -40,6 +46,52 @@ export default function Profile() {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      showLoader('Uploading profile photo...');
+
+      // Upload file
+      const uploadResponse = await fileService.upload(file, {
+        relatedEntityType: 'user',
+        relatedEntityId: user?._id,
+        isPublic: 'true'
+      });
+
+      const imageUrl = uploadResponse.data.file.fileUrl;
+
+      // Update profile with new image URL
+      await authService.updateProfile({ profileImage: imageUrl });
+      
+      setProfileImage(imageUrl);
+      updateUser({ ...user, profileImage: imageUrl });
+      toast.success('Profile photo updated successfully!');
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      toast.error(error.response?.data?.message || 'Failed to upload profile photo');
+    } finally {
+      setUploadingImage(false);
+      hideLoader();
+      // Reset file input
+      e.target.value = '';
     }
   };
 
@@ -65,11 +117,70 @@ export default function Profile() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-8">Profile Settings</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Profile Settings</h1>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="card space-y-6">
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Profile Photo Section */}
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Profile Photo</h2>
+          <div className="flex items-center space-x-6">
+            <div className="relative">
+              {profileImage ? (
+                <div className="relative group">
+                  <img
+                    src={profileImage}
+                    alt="Profile"
+                    className="w-24 h-24 rounded-full object-cover border-4 border-primary-200 shadow-lg"
+                  />
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full flex items-center justify-center transition-all cursor-pointer">
+                    <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white text-3xl font-bold border-4 border-primary-200 shadow-lg">
+                  {user?.firstName?.[0] || <User className="w-12 h-12" />}
+                </div>
+              )}
+            </div>
+            <div className="flex-1">
+              <label className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors cursor-pointer shadow-md hover:shadow-lg">
+                <Upload className="w-4 h-4" />
+                <span className="font-medium">{uploadingImage ? 'Uploading...' : profileImage ? 'Change Photo' : 'Upload Photo'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  disabled={uploadingImage}
+                />
+              </label>
+              {profileImage && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await authService.updateProfile({ profileImage: '' });
+                      setProfileImage('');
+                      updateUser({ ...user, profileImage: '' });
+                      toast.success('Profile photo removed');
+                    } catch (error) {
+                      toast.error('Failed to remove profile photo');
+                    }
+                  }}
+                  className="ml-3 inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                  <span className="font-medium">Remove</span>
+                </button>
+              )}
+              <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF. Max size 5MB</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="card space-y-6">
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
@@ -138,11 +249,14 @@ export default function Profile() {
               <input {...register('allergies')} className="input-field" placeholder="Peanuts, Penicillin, etc." />
             </div>
           </div>
+          </div>
         </div>
 
-        <button type="submit" className="btn-primary">
-          Save Changes
-        </button>
+        <div className="card">
+          <button type="submit" className="btn-primary w-full sm:w-auto">
+            Save Changes
+          </button>
+        </div>
       </form>
     </div>
   );

@@ -55,7 +55,7 @@ export const getStats = async (req, res) => {
     const cancelledAppointments = await Appointment.countDocuments({ status: APPOINTMENT_STATUSES.CANCELLED });
     
     // Revenue calculations
-    const paidAppointments = await Appointment.find({ paymentStatus: PAYMENT_STATUSES.PAID });
+    const paidAppointments = await Appointment.find({ paymentStatus: PAYMENT_STATUSES.COMPLETED });
     const totalRevenue = paidAppointments.reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
     
     const revenueToday = paidAppointments

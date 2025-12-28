@@ -24,6 +24,7 @@ import reviewRatingRoutes from './routes/reviewRating.js';
 import auditLogRoutes from './routes/auditLog.js';
 import masterRoleRoutes from './routes/masterRole.js';
 import fileRoutes from './routes/file.js';
+import paymentRoutes from './routes/payment.js';
 
 // Database configuration
 import connectDB from './config/database.js';
@@ -83,6 +84,7 @@ app.use('/api/review-ratings', reviewRatingRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/master-roles', masterRoleRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

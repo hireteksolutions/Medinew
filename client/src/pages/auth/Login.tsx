@@ -26,7 +26,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -43,11 +43,12 @@ export default function Login() {
     setLoading(true);
     try {
       await login(data.email, data.password);
-      // Login function updates user state and localStorage synchronously
-      // Get the updated user from localStorage to determine redirect
+      // Get the user from localStorage (set synchronously by login function)
+      // This ensures we have the role to determine redirect
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const userData = JSON.parse(storedUser);
+        // Redirect to appropriate dashboard based on user role
         navigate(getDashboardPath(userData.role));
       } else {
         // Fallback - should not happen if login succeeds

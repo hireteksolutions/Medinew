@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { patientService, appointmentService, reviewService } from '../../services/api';
 import { useLoader } from '../../context/LoaderContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { Calendar, X, RefreshCw, Star, MessageSquare, Clock, User, ArrowRight } from 'lucide-react';
-import { APPOINTMENT_STATUSES, APPOINTMENT_FILTERS, getAppointmentStatusColor, canCancelAppointment, TOAST_MESSAGES } from '../../constants';
+import { Calendar, X, Star, Clock, MoreVertical, IndianRupee } from 'lucide-react';
+import { APPOINTMENT_STATUSES, APPOINTMENT_FILTERS, canCancelAppointment, TOAST_MESSAGES } from '../../constants';
 import Badge from '../../components/common/Badge';
 
 export default function Appointments() {
@@ -16,10 +17,29 @@ export default function Appointments() {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchAppointments();
   }, [filter]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openDropdownId && dropdownRefs.current[openDropdownId]) {
+        if (!dropdownRefs.current[openDropdownId]?.contains(event.target as Node)) {
+          setOpenDropdownId(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openDropdownId]);
 
   const fetchAppointments = async () => {
     setLoading(true);
@@ -86,6 +106,24 @@ export default function Appointments() {
     // Only allow review for completed appointments
     // Backend will prevent duplicate reviews
     return appointment.status === APPOINTMENT_STATUSES.COMPLETED;
+  };
+
+  const needsPayment = (appointment: any) => {
+    // Check if payment is pending or not completed
+    return appointment.paymentStatus === 'pending' || 
+           appointment.paymentStatus === 'Pending' ||
+           (!appointment.paymentStatus && appointment.status !== APPOINTMENT_STATUSES.CANCELLED);
+  };
+
+  const handlePayment = (appointmentId: string) => {
+    navigate(`/payment/${appointmentId}`);
+  };
+
+  const hasActions = (appointment: any) => {
+    // Check if there are any available actions for this appointment
+    return needsPayment(appointment) || 
+           checkCanReview(appointment) || 
+           canCancelAppointment(appointment.status);
   };
 
   return (
@@ -183,16 +221,14 @@ export default function Appointments() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm">
-                        <Calendar className="w-4 h-4 text-primary-500 mr-2 flex-shrink-0" />
-                        <div>
-                          <div className="font-medium text-gray-900">
-                            {format(new Date(appointment.appointmentDate), 'MMM d, yyyy')}
-                          </div>
-                          <div className="flex items-center text-gray-500 mt-1">
-                            <Clock className="w-3 h-3 mr-1" />
-                            <span className="text-xs">{appointment.timeSlot.start} - {appointment.timeSlot.end}</span>
-                          </div>
+                      <div className="text-sm text-gray-900">
+                        <div className="flex items-center font-medium">
+                          <Calendar className="w-4 h-4 text-primary-500 mr-2 flex-shrink-0" />
+                          <span>{format(new Date(appointment.appointmentDate), 'MMM d, yyyy')}</span>
+                        </div>
+                        <div className="flex items-center text-gray-500 mt-1.5">
+                          <Clock className="w-3.5 h-3.5 text-primary-500 mr-1.5 flex-shrink-0" />
+                          <span className="text-xs">{appointment.timeSlot.start} - {appointment.timeSlot.end}</span>
                         </div>
                       </div>
                     </td>
@@ -217,28 +253,59 @@ export default function Appointments() {
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        {checkCanReview(appointment) && (
+                      {hasActions(appointment) ? (
+                        <div className="relative" ref={(el) => (dropdownRefs.current[appointment._id] = el)} onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => handleReviewClick(appointment)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
-                            title="Review & Rate"
+                            onClick={() => setOpenDropdownId(openDropdownId === appointment._id ? null : appointment._id)}
+                            className="inline-flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Actions"
                           >
-                            <Star className="w-3.5 h-3.5" />
-                            <span>Review</span>
+                            <MoreVertical className="w-5 h-5" />
                           </button>
-                        )}
-                        {canCancelAppointment(appointment.status) && (
-                          <button
-                            onClick={() => handleCancel(appointment._id)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                            title="Cancel Appointment"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            <span>Cancel</span>
-                          </button>
-                        )}
-                      </div>
+                          {openDropdownId === appointment._id && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
+                              {needsPayment(appointment) && (
+                                <button
+                                  onClick={() => {
+                                    handlePayment(appointment._id);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition-colors"
+                                >
+                                  <IndianRupee className="w-4 h-4" />
+                                  <span>Pay Now</span>
+                                </button>
+                              )}
+                              {checkCanReview(appointment) && (
+                                <button
+                                  onClick={() => {
+                                    handleReviewClick(appointment);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                >
+                                  <Star className="w-4 h-4" />
+                                  <span>Review</span>
+                                </button>
+                              )}
+                              {canCancelAppointment(appointment.status) && (
+                                <button
+                                  onClick={() => {
+                                    handleCancel(appointment._id);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                  <span>Cancel</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">No actions</span>
+                      )}
                     </td>
                   </tr>
                 ))}

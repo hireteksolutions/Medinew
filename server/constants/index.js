@@ -29,11 +29,51 @@ export const APPOINTMENT_STATUS_VALUES = Object.values(APPOINTMENT_STATUSES);
 // Payment Statuses
 export const PAYMENT_STATUSES = {
   PENDING: 'pending',
-  PAID: 'paid',
+  PROCESSING: 'processing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
   REFUNDED: 'refunded',
+  PARTIALLY_REFUNDED: 'partially_refunded',
 };
 
 export const PAYMENT_STATUS_VALUES = Object.values(PAYMENT_STATUSES);
+
+// Payment Methods
+export const PAYMENT_METHODS = {
+  ONLINE: 'online',
+  CASH: 'cash',
+  CARD: 'card',
+  UPI: 'upi',
+  BANK_TRANSFER: 'bank_transfer',
+  WALLET: 'wallet',
+  CHEQUE: 'cheque',
+};
+
+export const PAYMENT_METHOD_VALUES = Object.values(PAYMENT_METHODS);
+
+// Payment Types
+export const PAYMENT_TYPES = {
+  APPOINTMENT: 'appointment',
+  CONSULTATION: 'consultation',
+  SERVICE: 'service',
+  OTHER: 'other',
+};
+
+export const PAYMENT_TYPE_VALUES = Object.values(PAYMENT_TYPES);
+
+// Payment Gateways
+export const PAYMENT_GATEWAYS = {
+  STRIPE: 'stripe',
+  PAYPAL: 'paypal',
+  RAZORPAY: 'razorpay',
+  SQUARE: 'square',
+  PAYU: 'payu',
+  CASHFREE: 'cashfree',
+  OFFLINE: 'offline', // For pay at clinic
+};
+
+export const PAYMENT_GATEWAY_VALUES = Object.values(PAYMENT_GATEWAYS);
 
 // Days of Week
 export const DAYS_OF_WEEK = {
@@ -156,6 +196,7 @@ export const RELATED_ENTITY_TYPE_VALUES = Object.values(RELATED_ENTITY_TYPES);
 export const DEFAULT_USER_ROLE = USER_ROLES.PATIENT;
 export const DEFAULT_APPOINTMENT_STATUS = APPOINTMENT_STATUSES.PENDING;
 export const DEFAULT_PAYMENT_STATUS = PAYMENT_STATUSES.PENDING;
+export const DEFAULT_PAYMENT_METHOD = PAYMENT_METHODS.ONLINE;
 export const DEFAULT_MESSAGE_STATUS = MESSAGE_STATUSES.PENDING;
 export const DEFAULT_MESSAGE_PRIORITY = MESSAGE_PRIORITIES.MEDIUM;
 export const DEFAULT_STORAGE_PROVIDER = STORAGE_PROVIDERS.LOCAL;

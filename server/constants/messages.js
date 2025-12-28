@@ -225,6 +225,38 @@ export const SESSION_MESSAGES = {
   ALL_SESSIONS_REVOKED_SUCCESSFULLY: 'All sessions revoked successfully',
 };
 
+// Payment Messages
+export const PAYMENT_MESSAGES = {
+  APPOINTMENT_ID_REQUIRED: 'Appointment ID is required',
+  AMOUNT_REQUIRED: 'Payment amount is required',
+  AMOUNT_MUST_BE_POSITIVE: 'Payment amount must be positive',
+  PAYMENT_METHOD_REQUIRED: 'Payment method is required',
+  PAYMENT_TYPE_REQUIRED: 'Payment type is required',
+  INVALID_PAYMENT_METHOD: 'Invalid payment method',
+  INVALID_PAYMENT_TYPE: 'Invalid payment type',
+  INVALID_PAYMENT_STATUS: 'Invalid payment status',
+  PAYMENT_NOT_FOUND: 'Payment not found',
+  APPOINTMENT_NOT_FOUND: 'Appointment not found',
+  PAYMENT_ALREADY_COMPLETED: 'Payment is already completed',
+  CANNOT_REFUND_PENDING_PAYMENT: 'Cannot refund a payment that is not completed',
+  CANNOT_REFUND_ALREADY_REFUNDED: 'Payment has already been refunded',
+  REFUND_AMOUNT_EXCEEDS_PAYMENT: 'Refund amount cannot exceed payment amount',
+  PAYMENT_CREATED_SUCCESSFULLY: 'Payment created successfully',
+  PAYMENT_UPDATED_SUCCESSFULLY: 'Payment updated successfully',
+  PAYMENT_COMPLETED_SUCCESSFULLY: 'Payment completed successfully',
+  PAYMENT_FAILED: 'Payment failed',
+  PAYMENT_CANCELLED_SUCCESSFULLY: 'Payment cancelled successfully',
+  REFUND_INITIATED_SUCCESSFULLY: 'Refund initiated successfully',
+  REFUND_COMPLETED_SUCCESSFULLY: 'Refund completed successfully',
+  PAYMENT_GATEWAY_NOT_CONFIGURED: 'Payment gateway is not configured',
+  PAYMENT_GATEWAY_ERROR: 'Payment gateway error occurred',
+  INVALID_PAYMENT_GATEWAY: 'Invalid payment gateway',
+  WEBHOOK_VERIFICATION_FAILED: 'Webhook verification failed',
+  WEBHOOK_PROCESSED_SUCCESSFULLY: 'Webhook processed successfully',
+  NOT_AUTHORIZED_TO_VIEW_PAYMENT: 'Not authorized to view this payment',
+  NOT_AUTHORIZED_TO_UPDATE_PAYMENT: 'Not authorized to update this payment',
+};
+
 // General/Common Messages
 export const GENERAL_MESSAGES = {
   SERVER_ERROR: 'Server error',

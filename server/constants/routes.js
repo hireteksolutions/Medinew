@@ -8,6 +8,7 @@ export const API_ROUTES = {
   APPOINTMENTS: '/api/appointments',
   DOCTORS_PUBLIC: '/api/doctors',
   MESSAGES: '/api/messages',
+  PAYMENTS: '/api/payments',
   REVIEWS: '/api/reviews',
   AVAILABILITY_SCHEDULES: '/api/availability-schedules',
   NOTIFICATIONS: '/api/notifications',
@@ -176,6 +177,19 @@ export const MASTER_ROLE_ROUTES = {
   BY_ID: '/:id',
   ACTIVE: '/active',
   STATS: '/stats',
+};
+
+// Payment Routes
+export const PAYMENT_ROUTES = {
+  BASE: '/payments',
+  ROOT: '/',
+  BY_ID: '/:id',
+  BY_APPOINTMENT: '/appointment/:appointmentId',
+  UPDATE_STATUS: '/:id/status',
+  VERIFY: '/:id/verify',
+  REFUND: '/:id/refund',
+  CANCEL: '/:id/cancel',
+  WEBHOOK: '/webhook/:gateway',
 };
 
 // Helper function to build route with params

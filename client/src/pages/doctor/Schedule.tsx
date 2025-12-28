@@ -470,19 +470,22 @@ export default function Schedule() {
 
   return (
     <div className="space-y-6">
-    <div>
-        <h1 className="text-3xl font-bold mb-2">Schedule Management</h1>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Schedule Management</h1>
         <p className="text-gray-600">
           Manage your weekly availability and time slots. Each day can be saved independently.
         </p>
       </div>
 
       {/* Weekly Schedule */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold mb-4 flex items-center">
-          <Calendar className="w-5 h-5 mr-2" />
-          Weekly Availability
-        </h2>
+      <div className="card">
+        <div className="bg-gradient-to-r from-primary-500 to-primary-600 -mx-6 -mt-6 px-6 py-4 mb-6 rounded-t-lg">
+          <h2 className="text-xl font-semibold text-white flex items-center">
+            <Calendar className="w-5 h-5 mr-2" />
+            Weekly Availability
+          </h2>
+          <p className="text-primary-100 text-sm mt-1">Set your available days and time slots for the week</p>
+        </div>
         
         <div className="space-y-4">
           {weeklySchedule.map((day, dayIndex) => {
@@ -494,39 +497,46 @@ export default function Schedule() {
             return (
               <div
                 key={day.day}
-                className={`border rounded-lg p-4 transition-colors ${
+                className={`border-2 rounded-xl p-5 transition-all duration-200 ${
                   day.isAvailable && day.timeSlots.length > 0
-                    ? 'border-primary-300 bg-primary-50'
-                    : 'hover:bg-gray-50'
-                }`}
+                    ? 'border-primary-300 bg-gradient-to-br from-primary-50 to-primary-100 shadow-md'
+                    : day.isAvailable
+                    ? 'border-gray-300 bg-gray-50 hover:border-primary-200'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                } ${isModified ? 'ring-2 ring-yellow-400 ring-opacity-50' : ''}`}
               >
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      checked={day.isAvailable}
-                      onChange={() => toggleDayAvailability(dayIndex)}
-                      className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
-                    />
-                    <label className="text-lg font-semibold cursor-pointer">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={day.isAvailable}
+                        onChange={() => toggleDayAvailability(dayIndex)}
+                        className="w-6 h-6 text-primary-500 rounded focus:ring-2 focus:ring-primary-500 cursor-pointer transition-all"
+                      />
+                    </div>
+                    <label className="text-lg font-bold text-gray-900 cursor-pointer flex items-center gap-2">
                       {dayInfo?.label}
+                      {day.isAvailable && day.timeSlots.length > 0 && (
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-primary-500 text-white shadow-sm">
+                          {day.timeSlots.length} slot{day.timeSlots.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {!isModified && day.isAvailable && day.timeSlots.length > 0 && (
+                        <CheckCircle className="w-5 h-5 text-green-500" title="Saved" />
+                      )}
+                      {isModified && (
+                        <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-400 text-yellow-900 animate-pulse">
+                          Unsaved
+                        </span>
+                      )}
                     </label>
-                    {day.isAvailable && day.timeSlots.length > 0 && (
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-primary-100 text-primary-700">
-                        {day.timeSlots.length} slot{day.timeSlots.length !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {!isModified && day.isAvailable && day.timeSlots.length > 0 && (
-                      <div title="Saved">
-                        <CheckCircle className="w-5 h-5 text-green-500" />
-                      </div>
-                    )}
                   </div>
                   <div className="flex items-center space-x-2">
                     {day.isAvailable && (
                       <button
                         onClick={() => addTimeSlot(dayIndex)}
-                        className="btn-secondary flex items-center space-x-1 text-sm"
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-all shadow-sm"
                       >
                         <Plus className="w-4 h-4" />
                         <span>Add Slot</span>
@@ -535,7 +545,7 @@ export default function Schedule() {
                     {canSave && (
                       <button
                         onClick={() => handleSaveDay(dayIndex)}
-                        className="btn-primary flex items-center space-x-1 text-sm"
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-500 rounded-lg hover:bg-primary-600 transition-all shadow-md hover:shadow-lg"
                       >
                         <Save className="w-4 h-4" />
                         <span>Save</span>
@@ -544,18 +554,21 @@ export default function Schedule() {
                     {isSaving && (
                       <div className="flex items-center space-x-2 text-primary-500">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500"></div>
-                        <span className="text-sm">Saving...</span>
+                        <span className="text-sm font-medium">Saving...</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {day.isAvailable && (
-                  <div className="ml-8 space-y-2">
+                  <div className="ml-10 space-y-3">
                     {day.timeSlots.length === 0 ? (
-                      <p className="text-gray-500 text-sm">
-                        No time slots added. Click "Add Slot" to add availability.
-                      </p>
+                      <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500 text-sm font-medium">
+                          No time slots added. Click "Add Slot" to add availability.
+                        </p>
+                      </div>
                     ) : (
                       day.timeSlots.map((slot, slotIndex) => {
                         // Check if this slot has validation errors
@@ -567,66 +580,75 @@ export default function Schedule() {
                         return (
                           <div
                             key={slotIndex}
-                            className={`flex items-center space-x-3 p-3 rounded-lg border-2 ${
+                            className={`flex items-center space-x-3 p-4 rounded-lg border-2 transition-all ${
                               isInvalid
-                                ? 'bg-red-50 border-red-300'
+                                ? 'bg-red-50 border-red-300 shadow-sm'
                                 : isSaved
-                                ? 'bg-green-50 border-green-300'
-                                : 'bg-gray-50 border-gray-200'
+                                ? 'bg-green-50 border-green-300 shadow-sm'
+                                : 'bg-white border-gray-200 hover:border-primary-300 hover:shadow-sm'
                             }`}
                           >
-                            <Clock className={`w-4 h-4 ${
+                            <Clock className={`w-5 h-5 flex-shrink-0 ${
                               isInvalid 
                                 ? 'text-red-500' 
                                 : isSaved 
                                 ? 'text-green-600' 
-                                : 'text-gray-500'
+                                : 'text-primary-500'
                             }`} />
-                            <div className="flex items-center space-x-2 flex-1">
-                              <input
-                                type="time"
-                                value={slot.start}
-                                onChange={(e) =>
-                                  updateTimeSlot(dayIndex, slotIndex, 'start', e.target.value)
-                                }
-                                className={`border rounded px-3 py-2 text-sm focus:ring-2 ${
-                                  isInvalid
-                                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-                                    : isSaved
-                                    ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
-                                    : 'focus:ring-primary-500 focus:border-primary-500'
-                                }`}
-                              />
-                              <span className="text-gray-500">to</span>
-                              <input
-                                type="time"
-                                value={slot.end}
-                                onChange={(e) =>
-                                  updateTimeSlot(dayIndex, slotIndex, 'end', e.target.value)
-                                }
-                                className={`border rounded px-3 py-2 text-sm focus:ring-2 ${
-                                  isInvalid
-                                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-                                    : isSaved
-                                    ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
-                                    : 'focus:ring-primary-500 focus:border-primary-500'
-                                }`}
-                              />
+                            <div className="flex items-center space-x-3 flex-1">
+                              <div className="flex items-center space-x-2">
+                                <label className="text-xs font-medium text-gray-600">From</label>
+                                <input
+                                  type="time"
+                                  value={slot.start}
+                                  onChange={(e) =>
+                                    updateTimeSlot(dayIndex, slotIndex, 'start', e.target.value)
+                                  }
+                                  className={`border-2 rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:outline-none transition-all ${
+                                    isInvalid
+                                      ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-white'
+                                      : isSaved
+                                      ? 'border-green-300 focus:ring-green-500 focus:border-green-500 bg-white'
+                                      : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500 hover:border-primary-400'
+                                  }`}
+                                />
+                              </div>
+                              <span className="text-gray-400 font-medium">→</span>
+                              <div className="flex items-center space-x-2">
+                                <label className="text-xs font-medium text-gray-600">To</label>
+                                <input
+                                  type="time"
+                                  value={slot.end}
+                                  onChange={(e) =>
+                                    updateTimeSlot(dayIndex, slotIndex, 'end', e.target.value)
+                                  }
+                                  className={`border-2 rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:outline-none transition-all ${
+                                    isInvalid
+                                      ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-white'
+                                      : isSaved
+                                      ? 'border-green-300 focus:ring-green-500 focus:border-green-500 bg-white'
+                                      : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500 hover:border-primary-400'
+                                  }`}
+                                />
+                              </div>
                               {isSaved && (
-                                <div className="flex items-center space-x-1 text-green-600" title="Saved">
+                                <div className="flex items-center space-x-1 text-green-600 ml-2" title="Saved">
                                   <CheckCircle className="w-4 h-4" />
-                                  <span className="text-xs font-medium">Saved</span>
+                                  <span className="text-xs font-semibold">Saved</span>
                                 </div>
                               )}
                             </div>
                             {isInvalid && (
-                              <span className="text-xs text-red-600 flex-1">
-                                {slotError}
-                              </span>
+                              <div className="flex items-center space-x-2 flex-1">
+                                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                                <span className="text-xs text-red-600 font-medium">
+                                  {slotError}
+                                </span>
+                              </div>
                             )}
                             <button
                               onClick={() => removeTimeSlot(dayIndex, slotIndex)}
-                              className="ml-auto text-red-500 hover:text-red-700 p-1"
+                              className="ml-auto p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
                               disabled={isSaving}
                               title="Remove slot"
                             >
@@ -645,37 +667,48 @@ export default function Schedule() {
       </div>
 
       {/* Blocked Dates Section */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold mb-4 flex items-center">
-          <AlertCircle className="w-5 h-5 mr-2" />
-          Blocked Dates
-        </h2>
+      <div className="card">
+        <div className="bg-gradient-to-r from-red-500 to-red-600 -mx-6 -mt-6 px-6 py-4 mb-6 rounded-t-lg">
+          <h2 className="text-xl font-semibold text-white flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2" />
+            Blocked Dates
+          </h2>
+          <p className="text-red-100 text-sm mt-1">Manage dates when you're unavailable for appointments</p>
+        </div>
         {blockedDates.length === 0 ? (
-          <p className="text-gray-500">No blocked dates</p>
+          <div className="text-center py-8">
+            <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 font-medium">No blocked dates</p>
+            <p className="text-gray-400 text-sm mt-1">All dates are available for appointments</p>
+          </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {blockedDates.map((date, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                className="flex items-center justify-between p-4 bg-red-50 border-2 border-red-200 rounded-lg hover:shadow-md transition-all"
               >
-                <span>{format(date, 'MMMM d, yyyy')}</span>
+                <div className="flex items-center space-x-2">
+                  <Calendar className="w-4 h-4 text-red-600" />
+                  <span className="font-medium text-gray-900">{format(date, 'MMMM d, yyyy')}</span>
+                </div>
                 <button
                   onClick={async () => {
                     try {
                       await doctorDashboardService.unblockDates([
                         format(date, 'yyyy-MM-dd')
                       ]);
-                      toast.success('Date unblocked');
+                      toast.success('Date unblocked successfully');
                       fetchSchedule();
                     } catch (error: any) {
                       toast.error(error.response?.data?.message || 'Failed to unblock date');
                     }
                   }}
-                  className="text-red-500 hover:text-red-700"
+                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-lg transition-all"
+                  title="Unblock this date"
                 >
                   <X className="w-4 h-4" />
-        </button>
+                </button>
               </div>
             ))}
           </div>

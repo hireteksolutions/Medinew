@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminService } from '../../services/api';
 import { 
   Users, 
@@ -13,7 +13,8 @@ import {
   Calendar,
   Mail,
   Phone,
-  FileText
+  FileText,
+  MoreVertical
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -48,10 +49,28 @@ export default function Patients() {
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     fetchPatients();
   }, [statusFilter, dateFrom, dateTo]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openDropdownId && dropdownRefs.current[openDropdownId]) {
+        if (!dropdownRefs.current[openDropdownId]?.contains(event.target as Node)) {
+          setOpenDropdownId(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openDropdownId]);
 
   const fetchPatients = async () => {
     try {
@@ -279,89 +298,113 @@ export default function Patients() {
                           <img
                             src={patient.userId.profileImage}
                             alt={`${patient.userId.firstName} ${patient.userId.lastName}`}
-                            className="w-10 h-10 rounded-full mr-3"
+                            className="w-12 h-12 rounded-full mr-4 object-cover border-2 border-primary-100"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white mr-3">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold text-lg mr-4 border-2 border-primary-100">
                             {patient.userId.firstName[0]}
                           </div>
                         )}
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-sm font-semibold text-gray-900">
                             {patient.userId.firstName} {patient.userId.lastName}
                           </div>
-                          <div className="text-sm text-gray-500">ID: {patient._id.slice(-8)}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">ID: {patient._id.slice(-8)}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-gray-400" />
-                        {patient.userId.email}
-                      </div>
-                      {patient.userId.phone && (
-                        <div className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                          <Phone className="w-4 h-4 text-gray-400" />
-                          {patient.userId.phone}
+                      <div className="text-sm text-gray-900">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Mail className="w-4 h-4 text-gray-400" />
+                          <span className="text-xs">{patient.userId.email}</span>
                         </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        {format(new Date(patient.userId.createdAt), 'MMM d, yyyy')}
+                        {patient.userId.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-gray-400" />
+                            <span className="text-xs text-gray-500">{patient.userId.phone}</span>
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          patient.userId.isActive
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
+                      <div className="text-sm text-gray-900">
+                        <div className="flex items-center font-medium">
+                          <Calendar className="w-4 h-4 text-primary-500 mr-2 flex-shrink-0" />
+                          <span>{format(new Date(patient.userId.createdAt), 'MMM d, yyyy')}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Badge variant={getUserStatusBadgeVariant(patient.userId.isActive)}>
                         {patient.userId.isActive ? 'Active' : 'Suspended'}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-primary-500" />
-                        <span className="font-medium">{patient.totalAppointments || 0}</span>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">{patient.totalAppointments || 0}</div>
+                          <div className="text-xs text-gray-500">appointments</div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative" ref={(el) => (dropdownRefs.current[patient._id] = el)} onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => handleViewDetails(patient._id)}
-                          className="text-primary-600 hover:text-primary-900 p-1"
-                          title="View Details"
+                          onClick={() => setOpenDropdownId(openDropdownId === patient._id ? null : patient._id)}
+                          className="inline-flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Actions"
                         >
-                          <Eye className="w-4 h-4" />
+                          <MoreVertical className="w-5 h-5" />
                         </button>
-                        {patient.userId.isActive ? (
-                          <button
-                            onClick={() => handleSuspend(patient)}
-                            className="text-yellow-600 hover:text-yellow-900 p-1"
-                            title="Suspend"
-                          >
-                            <UserX className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleActivate(patient)}
-                            className="text-green-600 hover:text-green-900 p-1"
-                            title="Activate"
-                          >
-                            <UserCheck className="w-4 h-4" />
-                          </button>
+                        {openDropdownId === patient._id && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
+                            <button
+                              onClick={() => {
+                                handleViewDetails(patient._id);
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>View</span>
+                            </button>
+                            {patient.userId.isActive ? (
+                              <button
+                                onClick={() => {
+                                  handleSuspend(patient);
+                                  setOpenDropdownId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-600 hover:bg-yellow-50 transition-colors"
+                              >
+                                <UserX className="w-4 h-4" />
+                                <span>Suspend</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  handleActivate(patient);
+                                  setOpenDropdownId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition-colors"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                                <span>Activate</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                handleDelete(patient);
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
                         )}
-                        <button
-                          onClick={() => handleDelete(patient)}
-                          className="text-red-600 hover:text-red-900 p-1"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
                     </td>
                   </tr>

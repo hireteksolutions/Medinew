@@ -58,6 +58,11 @@ const appointmentSchema = new mongoose.Schema({
   appointmentNumber: {
     type: String,
     unique: true
+  },
+  paymentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment',
+    sparse: true
   }
 }, {
   timestamps: true
@@ -68,6 +73,28 @@ appointmentSchema.pre('save', async function(next) {
   if (!this.appointmentNumber) {
     const count = await mongoose.model('Appointment').countDocuments();
     this.appointmentNumber = `APT-${Date.now()}-${count + 1}`;
+  }
+  
+  // Normalize invalid paymentStatus values
+  if (this.paymentStatus === 'paid') {
+    this.paymentStatus = PAYMENT_STATUSES.COMPLETED;
+  }
+  
+  next();
+});
+
+// Also normalize on update operations (findByIdAndUpdate, etc.)
+appointmentSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], function(next) {
+  const update = this.getUpdate();
+  if (update) {
+    // Handle direct update
+    if (update.paymentStatus === 'paid') {
+      update.paymentStatus = PAYMENT_STATUSES.COMPLETED;
+    }
+    // Handle $set operator
+    if (update.$set && update.$set.paymentStatus === 'paid') {
+      update.$set.paymentStatus = PAYMENT_STATUSES.COMPLETED;
+    }
   }
   next();
 });

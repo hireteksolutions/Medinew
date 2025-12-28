@@ -14,6 +14,7 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import Doctors from './pages/Doctors';
 import DoctorProfile from './pages/DoctorProfile';
 import BookAppointment from './pages/BookAppointment';
+import Payment from './pages/Payment';
 import PatientDashboard from './pages/patient/Dashboard';
 import DoctorDashboard from './pages/doctor/Dashboard';
 import AdminDashboard from './pages/admin/Dashboard';
@@ -48,6 +49,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={[USER_ROLES.PATIENT]}>
                   <BookAppointment />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payment/:appointmentId"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.PATIENT]}>
+                  <Payment />
                 </ProtectedRoute>
               }
             />

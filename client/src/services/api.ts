@@ -16,6 +16,7 @@ import {
   AUDIT_LOG_ROUTES,
   MASTER_ROLE_ROUTES,
   FILE_ROUTES,
+  PAYMENT_ROUTES,
 } from '../constants/routes';
 
 // Use environment variable or default to local development API URL
@@ -535,6 +536,41 @@ export const masterRoleService = {
   },
   getStats: () => {
     return api.get(`${API_ROUTES.MASTER_ROLES}${MASTER_ROLE_ROUTES.STATS}`);
+  },
+};
+
+// Payment Service
+export const paymentService = {
+  create: (data: any) => {
+    return api.post(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.ROOT}`, data);
+  },
+
+  getById: (id: string) => {
+    return api.get(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.getId(id)}`);
+  },
+
+  getAll: (params?: any) => {
+    return api.get(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.ROOT}`, { params });
+  },
+
+  getByAppointment: (appointmentId: string) => {
+    return api.get(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.getByAppointment(appointmentId)}`);
+  },
+
+  verify: (id: string) => {
+    return api.post(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.getVerify(id)}`);
+  },
+
+  cancel: (id: string) => {
+    return api.put(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.getCancel(id)}`);
+  },
+
+  updateStatus: (id: string, data: any) => {
+    return api.put(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.getUpdateStatus(id)}`, data);
+  },
+
+  refund: (id: string, data: any) => {
+    return api.post(`${API_ROUTES.PAYMENTS}${PAYMENT_ROUTES.getRefund(id)}`, data);
   },
 };
 

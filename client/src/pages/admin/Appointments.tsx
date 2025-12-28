@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminService } from '../../services/api';
 import { format } from 'date-fns';
 import { 
@@ -14,7 +14,8 @@ import {
   AlertCircle,
   User,
   UserCheck,
-  FileText
+  FileText,
+  MoreVertical
 } from 'lucide-react';
 import { getAppointmentStatusColor, APPOINTMENT_STATUSES, TOAST_MESSAGES } from '../../constants';
 import toast from 'react-hot-toast';
@@ -32,6 +33,7 @@ interface Appointment {
     lastName: string;
     email: string;
     phone: string;
+    profileImage?: string;
   };
   doctorId: {
     _id: string;
@@ -62,6 +64,8 @@ export default function Appointments() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     fetchAppointments();
@@ -381,39 +385,24 @@ export default function Appointments() {
       ) : (
         <div className="card overflow-x-auto p-0">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-r from-primary-500 to-primary-600">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ID #
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Patient
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cust. Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Doctor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Payment
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Action
-                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">ID #</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Patient</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Doctor</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Date & Time</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Payment</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-white uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredAppointments.map((appointment) => (
-                <tr key={appointment._id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{appointment.appointmentNumber || appointment._id.slice(-6)}
+                <tr key={appointment._id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500 font-mono text-xs">
+                      #{appointment.appointmentNumber || appointment._id.slice(-6)}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -421,29 +410,42 @@ export default function Appointments() {
                         <img
                           src={appointment.patientId.profileImage}
                           alt={`${appointment.patientId.firstName} ${appointment.patientId.lastName}`}
-                          className="w-8 h-8 rounded-full mr-3"
+                          className="w-12 h-12 rounded-full mr-4 object-cover border-2 border-primary-100"
                         />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold mr-3">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold text-lg mr-4 border-2 border-primary-100">
                           {appointment.patientId.firstName[0]}
                         </div>
                       )}
-                      <div className="text-sm font-medium text-gray-900">
-                        {appointment.patientId.firstName} {appointment.patientId.lastName}
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          {appointment.patientId.firstName} {appointment.patientId.lastName}
+                        </div>
+                        {appointment.patientId.email && (
+                          <div className="text-xs text-gray-500 mt-0.5">{appointment.patientId.email}</div>
+                        )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {appointment.patientId.email}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        Dr. {appointment.doctorId.firstName} {appointment.doctorId.lastName}
+                      </div>
+                      <div className="text-xs text-primary-600 font-medium mt-0.5">{appointment.doctorId.specialization}</div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      Dr. {appointment.doctorId.firstName} {appointment.doctorId.lastName}
+                    <div className="text-sm text-gray-900">
+                      <div className="flex items-center font-medium">
+                        <Calendar className="w-4 h-4 text-primary-500 mr-2 flex-shrink-0" />
+                        <span>{format(new Date(appointment.appointmentDate), 'MMM d, yyyy')}</span>
+                      </div>
+                      <div className="flex items-center text-gray-500 mt-1.5">
+                        <Clock className="w-3.5 h-3.5 text-primary-500 mr-1.5 flex-shrink-0" />
+                        <span className="text-xs">{appointment.timeSlot.start} - {appointment.timeSlot.end}</span>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">{appointment.doctorId.specialization}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {format(new Date(appointment.appointmentDate), 'dd-MM-yyyy')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Badge variant={getAppointmentBadgeVariant(appointment.status)}>
@@ -456,13 +458,29 @@ export default function Appointments() {
                     </Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleViewDetails(appointment)}
-                      className="text-gray-400 hover:text-gray-600 p-1"
-                      title="View Details"
-                    >
-                      <Eye className="w-5 h-5" />
-                    </button>
+                    <div className="relative" ref={(el) => (dropdownRefs.current[appointment._id] = el)} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => setOpenDropdownId(openDropdownId === appointment._id ? null : appointment._id)}
+                        className="inline-flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Actions"
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+                      {openDropdownId === appointment._id && (
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
+                          <button
+                            onClick={() => {
+                              handleViewDetails(appointment);
+                              setOpenDropdownId(null);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>View Details</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

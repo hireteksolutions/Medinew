@@ -60,7 +60,7 @@ export default function DoctorDashboard() {
               {/* User Info Section */}
               <div className="mb-6 pb-6 border-b border-gray-200">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">Dashboard</h2>
+                  <h2 className="text-xl font-bold text-gray-800">Doctor Dashboard</h2>
                   <button
                     onClick={closeSidebar}
                     className="lg:hidden p-1 hover:bg-gray-100 rounded"

@@ -4,8 +4,9 @@ import Appointment from '../models/Appointment.js';
 import Patient from '../models/Patient.js';
 import Review from '../models/Review.js';
 import Message from '../models/Message.js';
+import Payment from '../models/Payment.js';
 import AvailabilitySchedule from '../models/AvailabilitySchedule.js';
-import { APPOINTMENT_STATUSES, MESSAGE_STATUSES, DAY_OF_WEEK_VALUES } from '../constants/index.js';
+import { APPOINTMENT_STATUSES, MESSAGE_STATUSES, DAY_OF_WEEK_VALUES, PAYMENT_STATUSES } from '../constants/index.js';
 import { DOCTOR_MESSAGES, APPOINTMENT_MESSAGES, AUTH_MESSAGES } from '../constants/messages.js';
 
 // ============================================
@@ -488,7 +489,7 @@ export const getDashboard = async (req, res) => {
     const completedAppointments = await Appointment.find({
       doctorId,
       status: APPOINTMENT_STATUSES.COMPLETED,
-      paymentStatus: 'paid'
+      paymentStatus: PAYMENT_STATUSES.COMPLETED
     }).select('consultationFee updatedAt createdAt');
 
     const totalRevenue = completedAppointments
@@ -531,7 +532,7 @@ export const getDashboard = async (req, res) => {
         doctorId,
         status: APPOINTMENT_STATUSES.COMPLETED,
         updatedAt: { $gte: monthStart, $lte: monthEnd },
-        paymentStatus: 'paid'
+        paymentStatus: PAYMENT_STATUSES.COMPLETED
       }).select('consultationFee');
 
       const revenue = monthAppts.reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
@@ -765,9 +766,11 @@ export const getAppointments = async (req, res) => {
       query.patientId = patientId;
     }
 
+    // Use lean() to bypass Mongoose validation for reading (handles invalid enum values in DB)
     const appointments = await Appointment.find(query)
       .populate('patientId', 'firstName lastName phone email profileImage dateOfBirth gender address')
-      .sort({ appointmentDate: 1 });
+      .sort({ appointmentDate: 1 })
+      .lean();
 
     // Get all unique patient user IDs
     const patientUserIds = [...new Set(appointments.map(apt => apt.patientId._id.toString()))];
@@ -781,12 +784,31 @@ export const getAppointments = async (req, res) => {
       patientProfileMap.set(profile.userId.toString(), profile);
     });
 
-    // Attach patient profiles to appointments
+    // Get payment information for all appointments
+    const appointmentIds = appointments.map(apt => apt._id);
+    const payments = await Payment.find({ appointmentId: { $in: appointmentIds } });
+    const paymentMap = new Map();
+    payments.forEach(payment => {
+      paymentMap.set(payment.appointmentId.toString(), payment.toObject());
+    });
+
+    // Attach patient profiles and payment info to appointments
+    // Also normalize invalid paymentStatus values
     const appointmentsWithPatientProfile = appointments.map(appointment => {
-      const appointmentObj = appointment.toObject();
       const patientUserId = appointment.patientId._id.toString();
-      appointmentObj.patientProfile = patientProfileMap.get(patientUserId) || null;
-      return appointmentObj;
+      appointment.patientProfile = patientProfileMap.get(patientUserId) || null;
+      appointment.payment = paymentMap.get(appointment._id.toString()) || null;
+      
+      // Normalize invalid paymentStatus values
+      if (appointment.paymentStatus === 'paid') {
+        appointment.paymentStatus = PAYMENT_STATUSES.COMPLETED;
+        // Optionally update in database (async, don't wait)
+        Appointment.findByIdAndUpdate(appointment._id, { 
+          paymentStatus: PAYMENT_STATUSES.COMPLETED 
+        }).catch(err => console.error('Error updating paymentStatus:', err));
+      }
+      
+      return appointment;
     });
 
     res.json(appointmentsWithPatientProfile);
@@ -800,6 +822,8 @@ export const getAppointments = async (req, res) => {
 // @access  Private/Doctor
 export const getAppointment = async (req, res) => {
   try {
+    // Use lean() to bypass Mongoose validation for reading
+    // This prevents validation errors if database has invalid enum values
     const appointment = await Appointment.findOne({
       _id: req.params.id,
       doctorId: req.user._id
@@ -811,17 +835,36 @@ export const getAppointment = async (req, res) => {
           path: 'userId',
           model: 'User'
         }
-      });
+      })
+      .lean();
 
     if (!appointment) {
       return res.status(404).json({ message: APPOINTMENT_MESSAGES.APPOINTMENT_NOT_FOUND });
     }
 
+    // Normalize invalid paymentStatus values
+    if (appointment.paymentStatus === 'paid') {
+      appointment.paymentStatus = PAYMENT_STATUSES.COMPLETED;
+      // Optionally update in database (async, don't wait)
+      Appointment.findByIdAndUpdate(appointment._id, { 
+        paymentStatus: PAYMENT_STATUSES.COMPLETED 
+      }).catch(err => console.error('Error updating paymentStatus:', err));
+    }
+
+    // Get payment information
+    const payment = await Payment.findOne({ appointmentId: appointment._id }).lean();
+    
     // Get patient profile if exists
-    const patient = await Patient.findOne({ userId: appointment.patientId._id });
+    const patient = await Patient.findOne({ userId: appointment.patientId._id }).lean();
+
+    if (payment) {
+      appointment.payment = payment;
+    } else {
+      appointment.payment = null;
+    }
 
     res.json({
-      appointment,
+      appointment: appointment,
       patientProfile: patient
     });
   } catch (error) {
@@ -1061,7 +1104,26 @@ export const getPatientHistory = async (req, res) => {
       patientId: req.params.patientId,
       doctorId: req.user._id
     })
-      .sort({ appointmentDate: -1 });
+      .sort({ appointmentDate: -1 })
+      .lean();
+
+    // Get payment information for all appointments
+    const appointmentIds = appointments.map(apt => apt._id);
+    const payments = await Payment.find({ appointmentId: { $in: appointmentIds } }).lean();
+    const paymentMap = new Map();
+    payments.forEach(payment => {
+      paymentMap.set(payment.appointmentId.toString(), payment);
+    });
+
+    // Attach payment data to appointments
+    const appointmentsWithPayment = appointments.map(appointment => {
+      const appointmentObj = { ...appointment };
+      const payment = paymentMap.get(appointment._id.toString());
+      if (payment) {
+        appointmentObj.payment = payment;
+      }
+      return appointmentObj;
+    });
 
     const patient = await Patient.findOne({ userId: req.params.patientId });
     const user = await User.findById(req.params.patientId)
@@ -1072,7 +1134,7 @@ export const getPatientHistory = async (req, res) => {
         ...user?.toObject(),
         ...patient?.toObject()
       },
-      appointments
+      appointments: appointmentsWithPayment
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

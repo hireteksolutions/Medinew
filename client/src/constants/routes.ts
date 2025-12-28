@@ -15,6 +15,7 @@ export const API_ROUTES = {
   AUDIT_LOGS: '/api/audit-logs',
   MASTER_ROLES: '/api/master-roles',
   FILES: '/api/files',
+  PAYMENTS: '/api/payments',
 } as const;
 
 // Auth Routes
@@ -161,6 +162,19 @@ export const MASTER_ROLE_ROUTES = {
   getId: (id: string) => `/${id}`,
   ACTIVE: '/active',
   STATS: '/stats',
+} as const;
+
+// Payment Routes
+export const PAYMENT_ROUTES = {
+  BASE: '/payments',
+  ROOT: '/',
+  getId: (id: string) => `/${id}`,
+  getByAppointment: (appointmentId: string) => `/appointment/${appointmentId}`,
+  getUpdateStatus: (id: string) => `/${id}/status`,
+  getVerify: (id: string) => `/${id}/verify`,
+  getRefund: (id: string) => `/${id}/refund`,
+  getCancel: (id: string) => `/${id}/cancel`,
+  getWebhook: (gateway: string) => `/webhook/${gateway}`,
 } as const;
 
 // Helper function to build route with params

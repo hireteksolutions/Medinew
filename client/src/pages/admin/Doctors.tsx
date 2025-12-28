@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminService } from '../../services/api';
 import { 
   UserCheck, 
@@ -19,7 +19,8 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  FileText
+  FileText,
+  MoreVertical
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -61,6 +62,8 @@ export default function Doctors() {
   const [selectedDoctor, setSelectedDoctor] = useState<any>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   // Check for URL query parameters
   useEffect(() => {
@@ -70,6 +73,22 @@ export default function Doctors() {
       setApprovalFilter('pending');
     }
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openDropdownId && dropdownRefs.current[openDropdownId]) {
+        if (!dropdownRefs.current[openDropdownId]?.contains(event.target as Node)) {
+          setOpenDropdownId(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openDropdownId]);
 
   useEffect(() => {
     fetchDoctors();
@@ -325,8 +344,9 @@ export default function Doctors() {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Contact</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">License</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Rating</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Statistics</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Approval</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Account Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">Appointments</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-white uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -339,36 +359,38 @@ export default function Doctors() {
                           <img
                             src={doctor.userId.profileImage}
                             alt={`${doctor.userId.firstName} ${doctor.userId.lastName}`}
-                            className="w-10 h-10 rounded-full mr-3"
+                            className="w-12 h-12 rounded-full mr-4 object-cover border-2 border-primary-100"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white mr-3">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold text-lg mr-4 border-2 border-primary-100">
                             {doctor.userId.firstName[0]}
                           </div>
                         )}
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-sm font-semibold text-gray-900">
                             Dr. {doctor.userId.firstName} {doctor.userId.lastName}
                           </div>
-                          <div className="text-sm text-gray-500">{doctor.experience} years exp.</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{doctor.experience} years exp.</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{doctor.specialization}</div>
-                      <div className="text-sm text-gray-500">₹{doctor.consultationFee}/visit</div>
+                      <div className="text-sm text-primary-600 font-medium">{doctor.specialization}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">₹{doctor.consultationFee}/visit</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-gray-400" />
-                        {doctor.userId.email}
-                      </div>
-                      {doctor.userId.phone && (
-                        <div className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                          <Phone className="w-4 h-4 text-gray-400" />
-                          {doctor.userId.phone}
+                      <div className="text-sm text-gray-900">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Mail className="w-4 h-4 text-gray-400" />
+                          <span className="text-xs">{doctor.userId.email}</span>
                         </div>
-                      )}
+                        {doctor.userId.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-gray-400" />
+                            <span className="text-xs text-gray-500">{doctor.userId.phone}</span>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
                       {doctor.licenseNumber}
@@ -381,80 +403,77 @@ export default function Doctors() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-col gap-1">
-                        <Badge variant={doctor.isApproved ? 'success' : 'warning'}>
-                          {doctor.isApproved ? 'Approved' : 'Pending'}
-                        </Badge>
-                        <Badge variant={getUserStatusBadgeVariant(doctor.userId.isActive)}>
-                          {doctor.userId.isActive ? 'Active' : 'Suspended'}
-                        </Badge>
-                      </div>
+                      <Badge variant={doctor.isApproved ? 'success' : 'warning'}>
+                        {doctor.isApproved ? 'Approved' : 'Pending'}
+                      </Badge>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="flex flex-col space-y-1">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4 text-primary-500" />
-                          <span className="font-medium">{doctor.totalAppointments || 0}</span>
-                          <span className="text-gray-500 text-xs">appointments</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <UserCheck className="w-4 h-4 text-green-500" />
-                          <span className="font-medium">{doctor.totalPatients || 0}</span>
-                          <span className="text-gray-500 text-xs">patients</span>
-                        </div>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Badge variant={getUserStatusBadgeVariant(doctor.userId.isActive)}>
+                        {doctor.userId.isActive ? 'Active' : 'Suspended'}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-primary-500 flex-shrink-0" />
+                        <span className="text-sm font-semibold text-gray-900">{doctor.totalAppointments || 0}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative" ref={(el) => (dropdownRefs.current[doctor._id] = el)} onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => handleViewDetails(doctor._id)}
-                          className="text-primary-600 hover:text-primary-900 p-1"
-                          title="View Details"
+                          onClick={() => setOpenDropdownId(openDropdownId === doctor._id ? null : doctor._id)}
+                          className="inline-flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Actions"
                         >
-                          <Eye className="w-4 h-4" />
+                          <MoreVertical className="w-5 h-5" />
                         </button>
-                        {!doctor.isApproved && (
-                          <>
+                        {openDropdownId === doctor._id && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
                             <button
-                              onClick={() => handleApprove(doctor)}
-                              className="text-green-600 hover:text-green-900 p-1"
-                              title="Approve"
+                              onClick={() => {
+                                handleViewDetails(doctor._id);
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                             >
-                              <CheckCircle className="w-4 h-4" />
+                              <Eye className="w-4 h-4" />
+                              <span>View</span>
                             </button>
+                            {doctor.userId.isActive ? (
+                              <button
+                                onClick={() => {
+                                  handleSuspend(doctor);
+                                  setOpenDropdownId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-600 hover:bg-yellow-50 transition-colors"
+                              >
+                                <UserX className="w-4 h-4" />
+                                <span>Suspend</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  handleActivate(doctor);
+                                  setOpenDropdownId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition-colors"
+                              >
+                                <UserCheckIcon className="w-4 h-4" />
+                                <span>Activate</span>
+                              </button>
+                            )}
                             <button
-                              onClick={() => handleReject(doctor)}
-                              className="text-red-600 hover:text-red-900 p-1"
-                              title="Reject"
+                              onClick={() => {
+                                handleDelete(doctor);
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                             >
-                              <XCircle className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" />
+                              <span>Delete</span>
                             </button>
-                          </>
+                          </div>
                         )}
-                        {doctor.userId.isActive ? (
-                          <button
-                            onClick={() => handleSuspend(doctor)}
-                            className="text-yellow-600 hover:text-yellow-900 p-1"
-                            title="Suspend"
-                          >
-                            <UserX className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleActivate(doctor)}
-                            className="text-green-600 hover:text-green-900 p-1"
-                            title="Activate"
-                          >
-                            <UserCheckIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(doctor)}
-                          className="text-red-600 hover:text-red-900 p-1"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
                     </td>
                   </tr>

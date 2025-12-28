@@ -173,14 +173,14 @@ export default function Overview() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Calendar className="w-4 h-4 text-primary-500 mr-2" />
-                        <div>
-                          <div className="font-medium">{format(new Date(appointment.appointmentDate), 'MMM d, yyyy')}</div>
-                          <div className="flex items-center text-gray-500 mt-1">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {appointment.timeSlot.start} - {appointment.timeSlot.end}
-                          </div>
+                      <div className="text-sm text-gray-900">
+                        <div className="flex items-center font-medium">
+                          <Calendar className="w-4 h-4 text-primary-500 mr-2 flex-shrink-0" />
+                          <span>{format(new Date(appointment.appointmentDate), 'MMM d, yyyy')}</span>
+                        </div>
+                        <div className="flex items-center text-gray-500 mt-1.5">
+                          <Clock className="w-3.5 h-3.5 text-primary-500 mr-1.5 flex-shrink-0" />
+                          <span className="text-xs">{appointment.timeSlot.start} - {appointment.timeSlot.end}</span>
                         </div>
                       </div>
                     </td>

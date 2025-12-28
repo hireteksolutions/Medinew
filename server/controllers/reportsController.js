@@ -173,7 +173,7 @@ export const getRevenueStatistics = async (req, res) => {
     const { dateRange = 'month', startDate: customStart, endDate: customEnd } = req.query;
     const { startDate, endDate, now } = getDateRanges(dateRange, customStart, customEnd);
 
-    const matchStage = { paymentStatus: PAYMENT_STATUSES.PAID };
+    const matchStage = { paymentStatus: PAYMENT_STATUSES.COMPLETED };
     if (startDate && endDate) {
       matchStage.appointmentDate = { $gte: startDate, $lte: endDate };
     }
@@ -194,7 +194,7 @@ export const getRevenueStatistics = async (req, res) => {
     monthStart.setHours(0, 0, 0, 0);
 
     const revenueData = await Appointment.aggregate([
-      { $match: { paymentStatus: PAYMENT_STATUSES.PAID } },
+      { $match: { paymentStatus: PAYMENT_STATUSES.COMPLETED } },
       {
         $facet: {
           total: [
@@ -204,7 +204,7 @@ export const getRevenueStatistics = async (req, res) => {
           today: [
             {
               $match: {
-                paymentStatus: PAYMENT_STATUSES.PAID,
+                paymentStatus: PAYMENT_STATUSES.COMPLETED,
                 appointmentDate: { $gte: todayStart, $lte: todayEnd }
               }
             },
@@ -213,7 +213,7 @@ export const getRevenueStatistics = async (req, res) => {
           thisWeek: [
             {
               $match: {
-                paymentStatus: PAYMENT_STATUSES.PAID,
+                paymentStatus: PAYMENT_STATUSES.COMPLETED,
                 appointmentDate: { $gte: weekStart }
               }
             },
@@ -222,7 +222,7 @@ export const getRevenueStatistics = async (req, res) => {
           thisMonth: [
             {
               $match: {
-                paymentStatus: PAYMENT_STATUSES.PAID,
+                paymentStatus: PAYMENT_STATUSES.COMPLETED,
                 appointmentDate: { $gte: monthStart }
               }
             },
@@ -289,7 +289,7 @@ export const getDoctorPerformance = async (req, res) => {
           totalRevenue: {
             $sum: {
               $cond: [
-                { $eq: ['$paymentStatus', PAYMENT_STATUSES.PAID] },
+                { $eq: ['$paymentStatus', PAYMENT_STATUSES.COMPLETED] },
                 '$consultationFee',
                 0
               ]

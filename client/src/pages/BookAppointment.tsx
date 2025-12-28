@@ -134,9 +134,16 @@ export default function BookAppointment() {
 
     setLoading(true);
     try {
-      await appointmentService.create(data);
+      const response = await appointmentService.create(data);
       toast.success(TOAST_MESSAGES.APPOINTMENT_BOOKED_SUCCESS);
-      navigate(DASHBOARD_ROUTES.PATIENT.BASE);
+      // Redirect to payment page after successful appointment booking
+      const appointmentId = response.data.appointment?._id || response.data.appointment?.id;
+      if (appointmentId) {
+        navigate(`/payment/${appointmentId}`);
+      } else {
+        // Fallback: navigate to dashboard where they can see the appointment
+        navigate(DASHBOARD_ROUTES.PATIENT.BASE);
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || TOAST_MESSAGES.APPOINTMENT_BOOK_FAILED);
     } finally {
