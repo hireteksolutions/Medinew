@@ -80,7 +80,7 @@ export const getAppointments = async (req, res) => {
 
     const appointments = await Appointment.find(query)
       .populate('doctorId', 'firstName lastName specialization profileImage')
-      .sort({ appointmentDate: -1 });
+      .sort({ createdAt: -1 });
 
     res.json(appointments);
   } catch (error) {

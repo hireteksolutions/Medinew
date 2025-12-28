@@ -94,8 +94,25 @@ export default function Patients() {
   const calculateTotalPaid = (appointments: any[]) => {
     if (!Array.isArray(appointments)) return 0;
     return appointments.reduce((total, appointment) => {
-      if (appointment.payment && appointment.payment.status === 'completed' && appointment.payment.amount) {
-        return total + appointment.payment.amount;
+      if (!appointment.payment || !appointment.payment.amount) {
+        return total;
+      }
+
+      const payment = appointment.payment;
+      const status = payment.status?.toLowerCase();
+      const gateway = payment.paymentGateway?.toLowerCase();
+
+      // Count payments that are:
+      // 1. Completed (regardless of gateway)
+      // 2. Pay at Clinic (offline gateway - expected to be paid)
+      // 3. Online payments (online gateway - if not failed/cancelled)
+      const shouldCount = 
+        status === 'completed' || 
+        (gateway === 'offline') || // Pay at Clinic - expected payment
+        (gateway === 'online' && status !== 'failed' && status !== 'cancelled' && status !== 'refunded');
+
+      if (shouldCount) {
+        return total + payment.amount;
       }
       return total;
     }, 0);

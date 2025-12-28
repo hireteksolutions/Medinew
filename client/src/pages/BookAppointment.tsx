@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { DASHBOARD_ROUTES, DATE_CONSTANTS, TOAST_MESSAGES } from '../constants';
 import toast from 'react-hot-toast';
 import { format, addDays, isAfter, startOfDay } from 'date-fns';
-import { ChevronRight, ChevronLeft, Calendar, Clock, User, FileText, CheckCircle, ArrowLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Calendar, Clock, User, FileText, CheckCircle, ArrowLeft, CreditCard, IndianRupee } from 'lucide-react';
 import DatePickerComponent from '../components/common/DatePicker';
 
 const appointmentSchema = z.object({
@@ -22,6 +22,9 @@ const appointmentSchema = z.object({
   }),
   reasonForVisit: z.string().min(5, 'Reason must be at least 5 characters'),
   symptoms: z.string().optional(),
+  paymentGateway: z.enum(['online', 'offline'], {
+    required_error: 'Please select a payment method',
+  }),
 });
 
 type AppointmentFormData = z.infer<typeof appointmentSchema>;
@@ -103,9 +106,29 @@ export default function BookAppointment() {
     setLoadingSlots(true);
     try {
       const response = await appointmentService.getAvailableSlots(doctorId, date);
-      setAvailableSlots(response.data.slots || []);
-      if (response.data.slots && response.data.slots.length === 0) {
-        toast.error('No available time slots for this date. Please select another date.');
+      let slots = response.data.slots || [];
+      
+      // Filter out past time slots if the selected date is today
+      const selectedDateObj = new Date(date);
+      const today = new Date();
+      const isToday = selectedDateObj.toDateString() === today.toDateString();
+      
+      if (isToday) {
+        const currentTime = today.getHours() * 60 + today.getMinutes(); // Current time in minutes
+        slots = slots.filter((slot: any) => {
+          const [hours, minutes] = slot.start.split(':').map(Number);
+          const slotTime = hours * 60 + minutes;
+          return slotTime > currentTime; // Only show future slots
+        });
+      }
+      
+      setAvailableSlots(slots);
+      if (slots.length === 0) {
+        if (isToday) {
+          toast.error('No available time slots remaining for today. Please select another date.');
+        } else {
+          toast.error('No available time slots for this date. Please select another date.');
+        }
       }
     } catch (error: any) {
       setAvailableSlots([]);
@@ -136,10 +159,15 @@ export default function BookAppointment() {
     try {
       const response = await appointmentService.create(data);
       toast.success(TOAST_MESSAGES.APPOINTMENT_BOOKED_SUCCESS);
-      // Redirect to payment page after successful appointment booking
+      // Redirect to payment page if online payment, otherwise to dashboard
       const appointmentId = response.data.appointment?._id || response.data.appointment?.id;
       if (appointmentId) {
-        navigate(`/payment/${appointmentId}`);
+        if (data.paymentGateway === 'online') {
+          navigate(`/payment/${appointmentId}`);
+        } else {
+          // For offline payment, go to dashboard
+          navigate(DASHBOARD_ROUTES.PATIENT.BASE);
+        }
       } else {
         // Fallback: navigate to dashboard where they can see the appointment
         navigate(DASHBOARD_ROUTES.PATIENT.BASE);
@@ -168,7 +196,21 @@ export default function BookAppointment() {
         return;
       }
     }
-    if (step < 5) setStep(step + 1);
+    if (step === 4) {
+      const reasonForVisit = watch('reasonForVisit');
+      if (!reasonForVisit || reasonForVisit.trim().length < 5) {
+        toast.error('Please provide a reason for visit (at least 5 characters)');
+        return;
+      }
+    }
+    if (step === 5) {
+      const paymentGateway = watch('paymentGateway');
+      if (!paymentGateway) {
+        toast.error('Please select a payment method');
+        return;
+      }
+    }
+    if (step < 6) setStep(step + 1);
   };
 
   const prevStep = () => {
@@ -448,8 +490,100 @@ export default function BookAppointment() {
             </div>
           )}
 
-          {/* Step 5: Confirm */}
+          {/* Step 5: Payment Method */}
           {step === 5 && (
+            <div>
+              <h2 className="text-2xl font-semibold mb-6 flex items-center">
+                <CreditCard className="w-6 h-6 mr-2" />
+                Select Payment Method
+              </h2>
+              {selectedDoctor && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700 font-medium">Consultation Fee</span>
+                    <span className="text-2xl font-bold text-primary-600 flex items-center gap-1">
+                      <IndianRupee className="w-6 h-6" />
+                      {selectedDoctor.consultationFee}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-4">
+                <div
+                  onClick={() => {
+                    setValue('paymentGateway', 'online', { shouldValidate: true });
+                  }}
+                  className={`p-6 border-2 rounded-lg cursor-pointer transition-all ${
+                    watch('paymentGateway') === 'online'
+                      ? 'border-primary-500 bg-primary-50 shadow-md'
+                      : 'border-gray-300 hover:border-primary-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        watch('paymentGateway') === 'online'
+                          ? 'bg-primary-500'
+                          : 'bg-gray-200'
+                      }`}>
+                        <CreditCard className={`w-6 h-6 ${
+                          watch('paymentGateway') === 'online'
+                            ? 'text-white'
+                            : 'text-gray-600'
+                        }`} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg text-gray-900">Pay Online</h3>
+                        <p className="text-sm text-gray-600">Pay securely using credit/debit card, UPI, or wallet</p>
+                      </div>
+                    </div>
+                    {watch('paymentGateway') === 'online' && (
+                      <CheckCircle className="w-6 h-6 text-primary-500" />
+                    )}
+                  </div>
+                </div>
+                <div
+                  onClick={() => {
+                    setValue('paymentGateway', 'offline', { shouldValidate: true });
+                  }}
+                  className={`p-6 border-2 rounded-lg cursor-pointer transition-all ${
+                    watch('paymentGateway') === 'offline'
+                      ? 'border-primary-500 bg-primary-50 shadow-md'
+                      : 'border-gray-300 hover:border-primary-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        watch('paymentGateway') === 'offline'
+                          ? 'bg-primary-500'
+                          : 'bg-gray-200'
+                      }`}>
+                        <IndianRupee className={`w-6 h-6 ${
+                          watch('paymentGateway') === 'offline'
+                            ? 'text-white'
+                            : 'text-gray-600'
+                        }`} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg text-gray-900">Pay at Clinic</h3>
+                        <p className="text-sm text-gray-600">Pay in cash or card when you visit the clinic</p>
+                      </div>
+                    </div>
+                    {watch('paymentGateway') === 'offline' && (
+                      <CheckCircle className="w-6 h-6 text-primary-500" />
+                    )}
+                  </div>
+                </div>
+              </div>
+              {errors.paymentGateway && (
+                <p className="text-danger-500 mt-4">{errors.paymentGateway.message}</p>
+              )}
+            </div>
+          )}
+
+          {/* Step 6: Confirm */}
+          {step === 6 && (
             <div>
               <h2 className="text-2xl font-semibold mb-6 flex items-center">
                 <CheckCircle className="w-6 h-6 mr-2" />
@@ -476,9 +610,26 @@ export default function BookAppointment() {
                     <p>{watch('reasonForVisit')}</p>
                   </div>
                   <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-2">Payment Method</h3>
+                    <p className="text-lg font-medium text-primary-600">
+                      {watch('paymentGateway') === 'online' ? (
+                        <span className="flex items-center gap-2">
+                          <CreditCard className="w-5 h-5" />
+                          Pay Online
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <IndianRupee className="w-5 h-5" />
+                          Pay at Clinic
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="border rounded-lg p-4">
                     <h3 className="font-semibold mb-2">Consultation Fee</h3>
-                    <p className="text-2xl font-bold text-primary-500">
-                      ₹{selectedDoctor.consultationFee}
+                    <p className="text-2xl font-bold text-primary-500 flex items-center gap-1">
+                      <IndianRupee className="w-6 h-6" />
+                      {selectedDoctor.consultationFee}
                     </p>
                   </div>
                 </div>
@@ -497,7 +648,7 @@ export default function BookAppointment() {
               <ChevronLeft className="w-4 h-4 mr-1" />
               Previous
             </button>
-            {step < 5 ? (
+            {step < 6 ? (
               <button
                 type="button"
                 onClick={nextStep}

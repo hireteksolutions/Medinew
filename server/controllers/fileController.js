@@ -2,6 +2,8 @@ import fileStorageService from '../services/fileStorageService.js';
 import virusScanService from '../services/virusScanService.js';
 import File from '../models/File.js';
 import { FILE_MESSAGES, AUTHZ_MESSAGES } from '../constants/messages.js';
+import { RELATED_ENTITY_TYPE_VALUES } from '../constants/index.js';
+import mongoose from 'mongoose';
 
 /**
  * @desc    Upload file
@@ -38,9 +40,23 @@ export const uploadFile = async (req, res) => {
 
     // Update related entity if provided
     if (relatedEntityType && relatedEntityId) {
+      // Validate relatedEntityType is in the enum
+      if (!RELATED_ENTITY_TYPE_VALUES.includes(relatedEntityType)) {
+        return res.status(400).json({ 
+          message: `Invalid relatedEntityType: ${relatedEntityType}. Valid values are: ${RELATED_ENTITY_TYPE_VALUES.join(', ')}` 
+        });
+      }
+      
+      // Validate relatedEntityId is a valid ObjectId
+      if (!mongoose.Types.ObjectId.isValid(relatedEntityId)) {
+        return res.status(400).json({ 
+          message: `Invalid relatedEntityId: ${relatedEntityId}. Must be a valid ObjectId.` 
+        });
+      }
+      
       file.relatedEntity = {
         type: relatedEntityType,
-        id: relatedEntityId
+        id: new mongoose.Types.ObjectId(relatedEntityId)
       };
       await file.save();
     }
@@ -109,9 +125,21 @@ export const uploadMultipleFiles = async (req, res) => {
 
         // Update related entity if provided
         if (relatedEntityType && relatedEntityId) {
+          // Validate relatedEntityType is in the enum
+          if (!RELATED_ENTITY_TYPE_VALUES.includes(relatedEntityType)) {
+            console.error(`Invalid relatedEntityType: ${relatedEntityType} for file ${file._id}`);
+            continue; // Skip this file and continue with others
+          }
+          
+          // Validate relatedEntityId is a valid ObjectId
+          if (!mongoose.Types.ObjectId.isValid(relatedEntityId)) {
+            console.error(`Invalid relatedEntityId: ${relatedEntityId} for file ${file._id}`);
+            continue; // Skip this file and continue with others
+          }
+          
           file.relatedEntity = {
             type: relatedEntityType,
-            id: relatedEntityId
+            id: new mongoose.Types.ObjectId(relatedEntityId)
           };
           await file.save();
         }

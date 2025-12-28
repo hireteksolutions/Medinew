@@ -26,7 +26,14 @@ const DAYS_OF_WEEK = [
   { value: 'sunday', label: 'Sunday' },
 ];
 
+// Tab configuration - can be extended in the future
+const SCHEDULE_TABS = [
+  { id: 'availability', label: 'Availability', icon: Calendar },
+  { id: 'blocked-dates', label: 'Blocked Dates', icon: AlertCircle },
+];
+
 export default function Schedule() {
+  const [activeTab, setActiveTab] = useState<string>('availability');
   const [weeklySchedule, setWeeklySchedule] = useState<DayAvailability[]>([]);
   const [blockedDates, setBlockedDates] = useState<Date[]>([]);
   const [loading, setLoading] = useState(true);
@@ -473,21 +480,54 @@ export default function Schedule() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Schedule Management</h1>
         <p className="text-gray-600">
-          Manage your weekly availability and time slots. Each day can be saved independently.
+          Manage your weekly availability, time slots, and blocked dates. Each day can be saved independently.
         </p>
       </div>
 
-      {/* Weekly Schedule */}
-      <div className="card">
-        <div className="bg-gradient-to-r from-primary-500 to-primary-600 -mx-6 -mt-6 px-6 py-4 mb-6 rounded-t-lg">
-          <h2 className="text-xl font-semibold text-white flex items-center">
-            <Calendar className="w-5 h-5 mr-2" />
-            Weekly Availability
-          </h2>
-          <p className="text-primary-100 text-sm mt-1">Set your available days and time slots for the week</p>
+      {/* Tabs */}
+      <div className="card p-0">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-1 px-6" aria-label="Tabs">
+            {SCHEDULE_TABS.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`
+                    flex items-center space-x-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors
+                    ${
+                      activeTab === tab.id
+                        ? 'border-primary-500 text-primary-600 bg-primary-50'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }
+                  `}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
         </div>
-        
-        <div className="space-y-4">
+
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'availability' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                    <Calendar className="w-6 h-6 mr-3 text-primary-500" />
+                    Weekly Availability
+                  </h2>
+                  <p className="text-gray-600 text-sm mt-1 ml-9">Set your available days and time slots for the week</p>
+                </div>
+              </div>
+              
+              {/* Weekly Schedule */}
+              <div className="space-y-4">
           {weeklySchedule.map((day, dayIndex) => {
             const dayInfo = DAYS_OF_WEEK.find(d => d.value === day.day);
             const isModified = modifiedDays.has(day.day);
@@ -497,16 +537,16 @@ export default function Schedule() {
             return (
               <div
                 key={day.day}
-                className={`border-2 rounded-xl p-5 transition-all duration-200 ${
+                className={`border-2 rounded-xl p-6 transition-all duration-200 ${
                   day.isAvailable && day.timeSlots.length > 0
-                    ? 'border-primary-300 bg-gradient-to-br from-primary-50 to-primary-100 shadow-md'
+                    ? 'border-primary-400 bg-gradient-to-br from-primary-50 via-primary-50 to-white shadow-lg'
                     : day.isAvailable
-                    ? 'border-gray-300 bg-gray-50 hover:border-primary-200'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                } ${isModified ? 'ring-2 ring-yellow-400 ring-opacity-50' : ''}`}
+                    ? 'border-gray-300 bg-gray-50 hover:border-primary-300 hover:shadow-md'
+                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                } ${isModified ? 'ring-2 ring-yellow-400 ring-opacity-75 shadow-yellow-100' : ''}`}
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center space-x-4">
                     <div className="relative">
                       <input
                         type="checkbox"
@@ -515,19 +555,19 @@ export default function Schedule() {
                         className="w-6 h-6 text-primary-500 rounded focus:ring-2 focus:ring-primary-500 cursor-pointer transition-all"
                       />
                     </div>
-                    <label className="text-lg font-bold text-gray-900 cursor-pointer flex items-center gap-2">
+                    <label className="text-xl font-bold text-gray-900 cursor-pointer flex items-center gap-3">
                       {dayInfo?.label}
                       {day.isAvailable && day.timeSlots.length > 0 && (
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-primary-500 text-white shadow-sm">
+                        <span className="px-3 py-1.5 text-xs font-bold rounded-full bg-primary-500 text-white shadow-md">
                           {day.timeSlots.length} slot{day.timeSlots.length !== 1 ? 's' : ''}
                         </span>
                       )}
                       {!isModified && day.isAvailable && day.timeSlots.length > 0 && (
-                        <CheckCircle className="w-5 h-5 text-green-500" title="Saved" />
+                        <CheckCircle className="w-6 h-6 text-green-500" title="Saved" />
                       )}
                       {isModified && (
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-400 text-yellow-900 animate-pulse">
-                          Unsaved
+                        <span className="px-3 py-1 text-xs font-bold rounded-full bg-yellow-400 text-yellow-900 animate-pulse shadow-sm">
+                          Unsaved Changes
                         </span>
                       )}
                     </label>
@@ -663,56 +703,107 @@ export default function Schedule() {
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Blocked Dates Section */}
-      <div className="card">
-        <div className="bg-gradient-to-r from-red-500 to-red-600 -mx-6 -mt-6 px-6 py-4 mb-6 rounded-t-lg">
-          <h2 className="text-xl font-semibold text-white flex items-center">
-            <AlertCircle className="w-5 h-5 mr-2" />
-            Blocked Dates
-          </h2>
-          <p className="text-red-100 text-sm mt-1">Manage dates when you're unavailable for appointments</p>
-        </div>
-        {blockedDates.length === 0 ? (
-          <div className="text-center py-8">
-            <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">No blocked dates</p>
-            <p className="text-gray-400 text-sm mt-1">All dates are available for appointments</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {blockedDates.map((date, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-4 bg-red-50 border-2 border-red-200 rounded-lg hover:shadow-md transition-all"
-              >
-                <div className="flex items-center space-x-2">
-                  <Calendar className="w-4 h-4 text-red-600" />
-                  <span className="font-medium text-gray-900">{format(date, 'MMMM d, yyyy')}</span>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await doctorDashboardService.unblockDates([
-                        format(date, 'yyyy-MM-dd')
-                      ]);
-                      toast.success('Date unblocked successfully');
-                      fetchSchedule();
-                    } catch (error: any) {
-                      toast.error(error.response?.data?.message || 'Failed to unblock date');
-                    }
-                  }}
-                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-lg transition-all"
-                  title="Unblock this date"
-                >
-                  <X className="w-4 h-4" />
-                </button>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
+
+          {activeTab === 'blocked-dates' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                    <AlertCircle className="w-6 h-6 mr-3 text-red-500" />
+                    Blocked Dates
+                  </h2>
+                  <p className="text-gray-600 text-sm mt-1 ml-9">
+                    Manage dates when you're unavailable for appointments. Blocked dates will prevent patients from booking appointments on those days.
+                  </p>
+                </div>
+              </div>
+
+              {/* Add Blocked Date */}
+              <div className="bg-white border-2 border-gray-200 rounded-xl p-6 shadow-sm">
+                <label className="block text-base font-semibold text-gray-900 mb-3 flex items-center">
+                  <Calendar className="w-5 h-5 mr-2 text-primary-500" />
+                  Block a New Date
+                </label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="date"
+                    min={format(new Date(), 'yyyy-MM-dd')}
+                    onChange={async (e) => {
+                      if (e.target.value) {
+                        try {
+                          await doctorDashboardService.blockDates([e.target.value]);
+                          toast.success('Date blocked successfully');
+                          fetchSchedule();
+                          e.target.value = ''; // Reset input
+                        } catch (error: any) {
+                          toast.error(error.response?.data?.message || 'Failed to block date');
+                        }
+                      }
+                    }}
+                    className="input-field flex-1"
+                    placeholder="Select date to block"
+                  />
+                </div>
+              </div>
+
+              {/* Blocked Dates List */}
+              {blockedDates.length === 0 ? (
+                <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-12 text-center">
+                  <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-700 font-semibold text-lg mb-1">No blocked dates</p>
+                  <p className="text-gray-500 text-sm">All dates are available for appointments</p>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Blocked Dates ({blockedDates.length})
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {blockedDates.map((date, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-4 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-300 rounded-xl hover:shadow-lg hover:border-red-400 transition-all group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-red-500 rounded-lg">
+                            <Calendar className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">{format(date, 'MMMM d, yyyy')}</p>
+                            <p className="text-xs text-gray-600">{format(date, 'EEEE')}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await doctorDashboardService.unblockDates([
+                                format(date, 'yyyy-MM-dd')
+                              ]);
+                              toast.success('Date unblocked successfully');
+                              fetchSchedule();
+                            } catch (error: any) {
+                              toast.error(error.response?.data?.message || 'Failed to unblock date');
+                            }
+                          }}
+                          className="p-2 text-red-600 hover:text-white hover:bg-red-600 rounded-lg transition-all group-hover:scale-110"
+                          title="Unblock this date"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

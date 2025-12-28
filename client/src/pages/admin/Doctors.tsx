@@ -128,7 +128,7 @@ export default function Doctors() {
   };
 
   const handleReject = async (doctor: Doctor) => {
-    if (!confirm('Are you sure you want to reject this doctor? This will delete their profile.')) return;
+    if (!confirm('Are you sure you want to reject this doctor? This will soft delete their profile.')) return;
     try {
       await adminService.rejectDoctor(doctor._id);
       toast.success(TOAST_MESSAGES.DOCTOR_REJECTED_SUCCESS);
@@ -160,7 +160,7 @@ export default function Doctors() {
   };
 
   const handleDelete = async (doctor: Doctor) => {
-    if (!confirm('Are you sure you want to delete this doctor? This action cannot be undone.')) return;
+    if (!confirm('Are you sure you want to delete this doctor? This will soft delete the doctor profile.')) return;
     try {
       await adminService.deleteDoctor(doctor._id);
       toast.success(TOAST_MESSAGES.DOCTOR_DELETED_SUCCESS);
@@ -439,6 +439,30 @@ export default function Doctors() {
                               <Eye className="w-4 h-4" />
                               <span>View</span>
                             </button>
+                            {!doctor.isApproved && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    handleApprove(doctor);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition-colors"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    handleReject(doctor);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                  <span>Reject</span>
+                                </button>
+                              </>
+                            )}
                             {doctor.userId.isActive ? (
                               <button
                                 onClick={() => {
@@ -485,10 +509,10 @@ export default function Doctors() {
       )}
 
       {/* Doctor Details Modal */}
-      {showDetails && selectedDoctor && (
+      {showDetails && selectedDoctor && selectedDoctor.doctor && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
               <h2 className="text-2xl font-bold">Doctor Details</h2>
               <button
                 onClick={() => setShowDetails(false)}
@@ -497,60 +521,211 @@ export default function Doctors() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              {selectedDoctor.doctor && (
-                <>
-                  <div className="flex items-center space-x-4 pb-4 border-b">
-                    {selectedDoctor.doctor.userId?.profileImage ? (
-                      <img
-                        src={selectedDoctor.doctor.userId.profileImage}
-                        alt={`${selectedDoctor.doctor.userId.firstName} ${selectedDoctor.doctor.userId.lastName}`}
-                        className="w-20 h-20 rounded-full"
-                      />
-                    ) : (
-                      <div className="w-20 h-20 rounded-full bg-primary-500 flex items-center justify-center text-white text-2xl">
-                        {selectedDoctor.doctor.userId?.firstName?.[0]}
+            <div className="p-6 space-y-6">
+              {/* Profile Header */}
+              <div className="flex items-center space-x-4 pb-4 border-b">
+                {selectedDoctor.doctor.userId?.profileImage ? (
+                  <img
+                    src={selectedDoctor.doctor.userId.profileImage}
+                    alt={`${selectedDoctor.doctor.userId.firstName} ${selectedDoctor.doctor.userId.lastName}`}
+                    className="w-24 h-24 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-full bg-primary-500 flex items-center justify-center text-white text-3xl font-bold">
+                    {selectedDoctor.doctor.userId?.firstName?.[0]}{selectedDoctor.doctor.userId?.lastName?.[0]}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-2xl font-semibold">
+                    Dr. {selectedDoctor.doctor.userId?.firstName} {selectedDoctor.doctor.userId?.lastName}
+                  </h3>
+                  <p className="text-primary-500 font-medium text-lg">{selectedDoctor.doctor.specialization}</p>
+                  <div className="flex items-center gap-4 mt-2">
+                    <div className="flex items-center gap-1">
+                      <Mail className="w-4 h-4 text-gray-500" />
+                      <p className="text-gray-600 text-sm">{selectedDoctor.doctor.userId?.email}</p>
+                    </div>
+                    {selectedDoctor.doctor.userId?.phone && (
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-4 h-4 text-gray-500" />
+                        <p className="text-gray-600 text-sm">{selectedDoctor.doctor.userId.phone}</p>
                       </div>
                     )}
-                    <div>
-                      <h3 className="text-xl font-semibold">
-                        Dr. {selectedDoctor.doctor.userId?.firstName} {selectedDoctor.doctor.userId?.lastName}
-                      </h3>
-                      <p className="text-primary-500 font-medium">{selectedDoctor.doctor.specialization}</p>
-                      <p className="text-gray-600">{selectedDoctor.doctor.userId?.email}</p>
-                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">License Number</p>
-                      <p className="font-medium font-mono">{selectedDoctor.doctor.licenseNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Experience</p>
-                      <p className="font-medium">{selectedDoctor.doctor.experience} years</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Consultation Fee</p>
-                      <p className="font-medium">₹{selectedDoctor.doctor.consultationFee}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Rating</p>
-                      <p className="font-medium flex items-center gap-1">
-                        <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                        {selectedDoctor.doctor.rating?.toFixed(1)} ({selectedDoctor.doctor.totalReviews} reviews)
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Total Appointments</p>
-                      <p className="font-medium">{selectedDoctor.stats?.totalAppointments || 0}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Total Patients</p>
-                      <p className="font-medium">{selectedDoctor.stats?.totalPatients || 0}</p>
-                    </div>
+                </div>
+              </div>
+
+              {/* Basic Information */}
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-gray-800">Basic Information</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">License Number</p>
+                    <p className="font-medium font-mono">{selectedDoctor.doctor.licenseNumber}</p>
                   </div>
-                </>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Experience</p>
+                    <p className="font-medium">{selectedDoctor.doctor.experience || 0} years</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Consultation Fee</p>
+                    <p className="font-medium">₹{selectedDoctor.doctor.consultationFee}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Consultation Duration</p>
+                    <p className="font-medium">{selectedDoctor.doctor.consultationDuration || 30} minutes</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Rating</p>
+                    <p className="font-medium flex items-center gap-1">
+                      <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                      {selectedDoctor.doctor.rating?.toFixed(1) || '0.0'} ({selectedDoctor.doctor.totalReviews || 0} reviews)
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Date of Birth</p>
+                    <p className="font-medium">
+                      {selectedDoctor.doctor.userId?.dateOfBirth 
+                        ? format(new Date(selectedDoctor.doctor.userId.dateOfBirth), 'dd MMM yyyy')
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  {selectedDoctor.doctor.userId?.gender && (
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">Gender</p>
+                      <p className="font-medium capitalize">{selectedDoctor.doctor.userId.gender}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Registration Date</p>
+                    <p className="font-medium">
+                      {selectedDoctor.doctor.userId?.createdAt 
+                        ? format(new Date(selectedDoctor.doctor.userId.createdAt), 'dd MMM yyyy')
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Account Status</p>
+                    <Badge variant={selectedDoctor.doctor.userId?.isActive ? 'success' : 'danger'}>
+                      {selectedDoctor.doctor.userId?.isActive ? 'Active' : 'Suspended'}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Approval Status</p>
+                    <Badge variant={selectedDoctor.doctor.isApproved ? 'success' : 'warning'}>
+                      {selectedDoctor.doctor.isApproved ? 'Approved' : 'Pending'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address */}
+              {selectedDoctor.doctor.userId?.address && (selectedDoctor.doctor.userId.address.street || selectedDoctor.doctor.userId.address.city) && (
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 text-gray-800">Address</h4>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-gray-700">
+                      {selectedDoctor.doctor.userId.address.street && `${selectedDoctor.doctor.userId.address.street}, `}
+                      {selectedDoctor.doctor.userId.address.city && `${selectedDoctor.doctor.userId.address.city}, `}
+                      {selectedDoctor.doctor.userId.address.state && `${selectedDoctor.doctor.userId.address.state} `}
+                      {selectedDoctor.doctor.userId.address.zipCode && `- ${selectedDoctor.doctor.userId.address.zipCode}`}
+                    </p>
+                  </div>
+                </div>
               )}
+
+              {/* Biography */}
+              {selectedDoctor.doctor.biography && (
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 text-gray-800">Biography</h4>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-gray-700 whitespace-pre-wrap">{selectedDoctor.doctor.biography}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Education */}
+              {selectedDoctor.doctor.education && selectedDoctor.doctor.education.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 text-gray-800 flex items-center gap-2">
+                    <Award className="w-5 h-5" />
+                    Education
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedDoctor.doctor.education.map((edu: any, index: number) => (
+                      <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                        <p className="font-semibold text-gray-800">{edu.degree}</p>
+                        <p className="text-gray-600">{edu.institution}</p>
+                        {edu.year && <p className="text-sm text-gray-500">Year: {edu.year}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Languages */}
+              {selectedDoctor.doctor.languages && selectedDoctor.doctor.languages.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 text-gray-800">Languages</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedDoctor.doctor.languages.map((lang: string, index: number) => (
+                      <span key={index} className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm">
+                        {lang}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Certifications */}
+              {selectedDoctor.doctor.certifications && selectedDoctor.doctor.certifications.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold mb-3 text-gray-800 flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Certifications
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedDoctor.doctor.certifications.map((cert: any, index: number) => (
+                      <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                        <p className="font-semibold text-gray-800">{cert.name}</p>
+                        {cert.issuingOrganization && (
+                          <p className="text-gray-600">{cert.issuingOrganization}</p>
+                        )}
+                        {cert.certificateNumber && (
+                          <p className="text-sm text-gray-500 font-mono">{cert.certificateNumber}</p>
+                        )}
+                        <div className="flex gap-4 mt-2 text-sm text-gray-500">
+                          {cert.issueDate && (
+                            <span>Issued: {format(new Date(cert.issueDate), 'dd MMM yyyy')}</span>
+                          )}
+                          {cert.expiryDate && (
+                            <span>Expires: {format(new Date(cert.expiryDate), 'dd MMM yyyy')}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Statistics */}
+              <div>
+                <h4 className="text-lg font-semibold mb-3 text-gray-800">Statistics</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-blue-600">{selectedDoctor.stats?.totalAppointments || 0}</p>
+                    <p className="text-sm text-gray-600 mt-1">Total Appointments</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-green-600">{selectedDoctor.stats?.totalPatients || 0}</p>
+                    <p className="text-sm text-gray-600 mt-1">Total Patients</p>
+                  </div>
+                  <div className="bg-yellow-50 p-4 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-yellow-600">{selectedDoctor.stats?.reviews || 0}</p>
+                    <p className="text-sm text-gray-600 mt-1">Total Reviews</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import Appointment from '../models/Appointment.js';
 import Doctor from '../models/Doctor.js';
 import User from '../models/User.js';
 import Review from '../models/Review.js';
+import Payment from '../models/Payment.js';
 import { APPOINTMENT_STATUSES, PAYMENT_STATUSES } from '../constants/index.js';
 
 // Helper function to get date ranges based on dateRange parameter
@@ -173,11 +174,6 @@ export const getRevenueStatistics = async (req, res) => {
     const { dateRange = 'month', startDate: customStart, endDate: customEnd } = req.query;
     const { startDate, endDate, now } = getDateRanges(dateRange, customStart, customEnd);
 
-    const matchStage = { paymentStatus: PAYMENT_STATUSES.COMPLETED };
-    if (startDate && endDate) {
-      matchStage.appointmentDate = { $gte: startDate, $lte: endDate };
-    }
-
     // Today's date range
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
@@ -193,51 +189,68 @@ export const getRevenueStatistics = async (req, res) => {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     monthStart.setHours(0, 0, 0, 0);
 
-    const revenueData = await Appointment.aggregate([
-      { $match: { paymentStatus: PAYMENT_STATUSES.COMPLETED } },
-      {
-        $facet: {
-          total: [
-            { $match: matchStage },
-            { $group: { _id: null, total: { $sum: '$consultationFee' } } }
-          ],
-          today: [
-            {
-              $match: {
-                paymentStatus: PAYMENT_STATUSES.COMPLETED,
-                appointmentDate: { $gte: todayStart, $lte: todayEnd }
-              }
-            },
-            { $group: { _id: null, total: { $sum: '$consultationFee' } } }
-          ],
-          thisWeek: [
-            {
-              $match: {
-                paymentStatus: PAYMENT_STATUSES.COMPLETED,
-                appointmentDate: { $gte: weekStart }
-              }
-            },
-            { $group: { _id: null, total: { $sum: '$consultationFee' } } }
-          ],
-          thisMonth: [
-            {
-              $match: {
-                paymentStatus: PAYMENT_STATUSES.COMPLETED,
-                appointmentDate: { $gte: monthStart }
-              }
-            },
-            { $group: { _id: null, total: { $sum: '$consultationFee' } } }
-          ]
+    // Get all payments that should be counted: completed, offline (Pay at Clinic), or online (not failed/cancelled/refunded)
+    const allPaymentsQuery = {
+      $or: [
+        { status: PAYMENT_STATUSES.COMPLETED },
+        { paymentGateway: 'offline' }, // Pay at Clinic - expected payment
+        { 
+          paymentGateway: 'online',
+          status: { $nin: ['failed', 'cancelled', 'refunded'] }
         }
-      }
-    ]);
+      ]
+    };
 
-    const result = revenueData[0];
+    // If date range is specified, filter by appointment dates
+    let appointmentIds = null;
+    if (startDate && endDate) {
+      const appointmentsInRange = await Appointment.find({
+        appointmentDate: { $gte: startDate, $lte: endDate }
+      }).select('_id');
+      appointmentIds = appointmentsInRange.map(apt => apt._id);
+      if (appointmentIds.length === 0) {
+        return res.json({ total: 0, today: 0, thisWeek: 0, thisMonth: 0 });
+      }
+    }
+
+    const allPayments = await Payment.find({
+      ...allPaymentsQuery,
+      ...(appointmentIds && { appointmentId: { $in: appointmentIds } })
+    }).populate('appointmentId', 'appointmentDate');
+
+    // Calculate total revenue
+    const totalRevenue = allPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+
+    // Calculate revenue by period
+    const revenueToday = allPayments
+      .filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.appointmentDate) return false;
+        const aptDate = new Date(payment.appointmentId.appointmentDate);
+        return aptDate >= todayStart && aptDate <= todayEnd;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+
+    const revenueThisWeek = allPayments
+      .filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.appointmentDate) return false;
+        const aptDate = new Date(payment.appointmentId.appointmentDate);
+        return aptDate >= weekStart;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+
+    const revenueThisMonth = allPayments
+      .filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.appointmentDate) return false;
+        const aptDate = new Date(payment.appointmentId.appointmentDate);
+        return aptDate >= monthStart;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+
     res.json({
-      total: result.total[0]?.total || 0,
-      today: result.today[0]?.total || 0,
-      thisWeek: result.thisWeek[0]?.total || 0,
-      thisMonth: result.thisMonth[0]?.total || 0
+      total: totalRevenue,
+      today: revenueToday,
+      thisWeek: revenueThisWeek,
+      thisMonth: revenueThisMonth
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -257,7 +270,8 @@ export const getDoctorPerformance = async (req, res) => {
       matchStage.appointmentDate = { $gte: startDate, $lte: endDate };
     }
 
-    const doctorPerformance = await Appointment.aggregate([
+    // First, get appointments grouped by doctor
+    const appointmentsByDoctor = await Appointment.aggregate([
       { $match: matchStage },
       {
         $lookup: {
@@ -286,15 +300,7 @@ export const getDoctorPerformance = async (req, res) => {
           completedAppointments: {
             $sum: { $cond: [{ $eq: ['$status', APPOINTMENT_STATUSES.COMPLETED] }, 1, 0] }
           },
-          totalRevenue: {
-            $sum: {
-              $cond: [
-                { $eq: ['$paymentStatus', PAYMENT_STATUSES.COMPLETED] },
-                '$consultationFee',
-                0
-              ]
-            }
-          }
+          appointmentIds: { $push: '$_id' }
         }
       },
       {
@@ -312,15 +318,37 @@ export const getDoctorPerformance = async (req, res) => {
       { $limit: parseInt(limit) }
     ]);
 
-    res.json(doctorPerformance.map(doc => ({
-      doctorId: doc._id,
-      doctorName: doc.doctorName,
-      specialization: doc.specialization,
-      totalAppointments: doc.totalAppointments,
-      completedAppointments: doc.completedAppointments,
-      completionRate: parseFloat(doc.completionRate.toFixed(2)),
-      totalRevenue: doc.totalRevenue
-    })));
+    // Calculate revenue from Payment model for each doctor
+    const doctorPerformance = await Promise.all(
+      appointmentsByDoctor.map(async (doc) => {
+        // Get all payments for this doctor's appointments that should be counted
+        const payments = await Payment.find({
+          appointmentId: { $in: doc.appointmentIds },
+          $or: [
+            { status: PAYMENT_STATUSES.COMPLETED },
+            { paymentGateway: 'offline' }, // Pay at Clinic - expected payment
+            { 
+              paymentGateway: 'online',
+              status: { $nin: ['failed', 'cancelled', 'refunded'] }
+            }
+          ]
+        });
+
+        const totalRevenue = payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+
+        return {
+          doctorId: doc._id,
+          doctorName: doc.doctorName,
+          specialization: doc.specialization,
+          totalAppointments: doc.totalAppointments,
+          completedAppointments: doc.completedAppointments,
+          completionRate: parseFloat(doc.completionRate.toFixed(2)),
+          totalRevenue
+        };
+      })
+    );
+
+    res.json(doctorPerformance);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

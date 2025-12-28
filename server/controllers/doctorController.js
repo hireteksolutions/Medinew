@@ -485,19 +485,33 @@ export const getDashboard = async (req, res) => {
     // Total patients treated
     const totalPatients = await Appointment.distinct('patientId', { doctorId }).then(ids => ids.length);
 
-    // Revenue generated (from completed appointments)
-    const completedAppointments = await Appointment.find({
-      doctorId,
-      status: APPOINTMENT_STATUSES.COMPLETED,
-      paymentStatus: PAYMENT_STATUSES.COMPLETED
-    }).select('consultationFee updatedAt createdAt');
+    // Revenue generated from Payment model
+    // Get all appointments for this doctor
+    const doctorAppointments = await Appointment.find({ doctorId }).select('_id');
+    const appointmentIds = doctorAppointments.map(apt => apt._id);
+    
+    // Get all payments that should be counted: completed, offline (Pay at Clinic), or online (not failed/cancelled/refunded)
+    const allPayments = await Payment.find({
+      appointmentId: { $in: appointmentIds },
+      $or: [
+        { status: PAYMENT_STATUSES.COMPLETED },
+        { paymentGateway: 'offline' }, // Pay at Clinic - expected payment
+        { 
+          paymentGateway: 'online',
+          status: { $nin: ['failed', 'cancelled', 'refunded'] }
+        }
+      ]
+    }).populate('appointmentId', 'updatedAt createdAt');
 
-    const totalRevenue = completedAppointments
-      .reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
+    const totalRevenue = allPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
-    const monthRevenue = completedAppointments
-      .filter(apt => apt.updatedAt >= startOfMonth)
-      .reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
+    const monthRevenue = allPayments
+      .filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.updatedAt) return false;
+        const aptDate = new Date(payment.appointmentId.updatedAt);
+        return aptDate >= startOfMonth;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
     // Pending messages count
     const pendingMessagesCount = await Message.countDocuments({
@@ -522,20 +536,20 @@ export const getDashboard = async (req, res) => {
       });
     }
 
-    // Monthly revenue (last 12 months)
+    // Monthly revenue (last 12 months) from Payment model
     const revenueTrend = [];
     for (let i = 11; i >= 0; i--) {
       const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
       
-      const monthAppts = await Appointment.find({
-        doctorId,
-        status: APPOINTMENT_STATUSES.COMPLETED,
-        updatedAt: { $gte: monthStart, $lte: monthEnd },
-        paymentStatus: PAYMENT_STATUSES.COMPLETED
-      }).select('consultationFee');
+      // Get payments for appointments in this month
+      const monthPayments = allPayments.filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.updatedAt) return false;
+        const aptDate = new Date(payment.appointmentId.updatedAt);
+        return aptDate >= monthStart && aptDate <= monthEnd;
+      });
 
-      const revenue = monthAppts.reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
+      const revenue = monthPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
       
       revenueTrend.push({
         month: monthStart.toLocaleString('default', { month: 'short', year: 'numeric' }),
@@ -769,7 +783,7 @@ export const getAppointments = async (req, res) => {
     // Use lean() to bypass Mongoose validation for reading (handles invalid enum values in DB)
     const appointments = await Appointment.find(query)
       .populate('patientId', 'firstName lastName phone email profileImage dateOfBirth gender address')
-      .sort({ appointmentDate: 1 })
+      .sort({ createdAt: -1 })
       .lean();
 
     // Get all unique patient user IDs

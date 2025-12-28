@@ -91,7 +91,15 @@ const doctorSchema = new mongoose.Schema({
     expiryDate: Date,
     certificateUrl: String,
     certificateNumber: String
-  }]
+  }],
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  }
 }, {
   timestamps: true
 });

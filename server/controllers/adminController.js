@@ -3,6 +3,7 @@ import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
 import Appointment from '../models/Appointment.js';
 import Review from '../models/Review.js';
+import Payment from '../models/Payment.js';
 import { USER_ROLES, APPOINTMENT_STATUSES, PAYMENT_STATUSES, DATE_CONSTANTS } from '../constants/index.js';
 import { DOCTOR_MESSAGES, ADMIN_MESSAGES, AUTHZ_MESSAGES, PATIENT_MESSAGES, APPOINTMENT_MESSAGES } from '../constants/messages.js';
 
@@ -54,21 +55,46 @@ export const getStats = async (req, res) => {
     const completedAppointments = await Appointment.countDocuments({ status: APPOINTMENT_STATUSES.COMPLETED });
     const cancelledAppointments = await Appointment.countDocuments({ status: APPOINTMENT_STATUSES.CANCELLED });
     
-    // Revenue calculations
-    const paidAppointments = await Appointment.find({ paymentStatus: PAYMENT_STATUSES.COMPLETED });
-    const totalRevenue = paidAppointments.reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
+    // Revenue calculations from Payment model
+    // Get all payments that should be counted: completed, offline (Pay at Clinic), or online (not failed/cancelled/refunded)
+    const allPayments = await Payment.find({
+      $or: [
+        { status: PAYMENT_STATUSES.COMPLETED },
+        { paymentGateway: 'offline' }, // Pay at Clinic - expected payment
+        { 
+          paymentGateway: 'online',
+          status: { $nin: ['failed', 'cancelled', 'refunded'] }
+        }
+      ]
+    }).populate('appointmentId', 'appointmentDate');
+
+    // Calculate total revenue from all valid payments
+    const totalRevenue = allPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
     
-    const revenueToday = paidAppointments
-      .filter(apt => apt.appointmentDate >= todayStart && apt.appointmentDate <= todayEnd)
-      .reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
+    // Calculate revenue by period based on appointment dates
+    const revenueToday = allPayments
+      .filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.appointmentDate) return false;
+        const aptDate = new Date(payment.appointmentId.appointmentDate);
+        return aptDate >= todayStart && aptDate <= todayEnd;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
     
-    const revenueThisWeek = paidAppointments
-      .filter(apt => apt.appointmentDate >= weekStart)
-      .reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
+    const revenueThisWeek = allPayments
+      .filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.appointmentDate) return false;
+        const aptDate = new Date(payment.appointmentId.appointmentDate);
+        return aptDate >= weekStart;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
     
-    const revenueThisMonth = paidAppointments
-      .filter(apt => apt.appointmentDate >= monthStart)
-      .reduce((sum, apt) => sum + (apt.consultationFee || 0), 0);
+    const revenueThisMonth = allPayments
+      .filter(payment => {
+        if (!payment.appointmentId || !payment.appointmentId.appointmentDate) return false;
+        const aptDate = new Date(payment.appointmentId.appointmentDate);
+        return aptDate >= monthStart;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
     
     // Pending doctor verifications
     const pendingDoctorVerifications = await Doctor.countDocuments({ isApproved: false });
@@ -191,7 +217,12 @@ export const getStats = async (req, res) => {
 export const getDoctors = async (req, res) => {
   try {
     const { approved, search } = req.query;
-    let query = {};
+    let query = { 
+      $or: [
+        { isDeleted: { $exists: false } }, // Include doctors without isDeleted field (existing records)
+        { isDeleted: false } // Include doctors that are not deleted
+      ]
+    };
 
     if (approved !== undefined) {
       query.isApproved = approved === 'true';
@@ -226,7 +257,7 @@ export const getDoctors = async (req, res) => {
 export const approveDoctor = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
-    if (!doctor) {
+    if (!doctor || (doctor.isDeleted === true)) {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_NOT_FOUND });
     }
 
@@ -517,7 +548,13 @@ export const deletePatient = async (req, res) => {
 // @access  Private/Admin
 export const getDoctorById = async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id)
+    const doctor = await Doctor.findOne({ 
+      _id: req.params.id,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    })
       .populate('userId', 'firstName lastName email phone profileImage dateOfBirth gender address isActive createdAt');
     
     if (!doctor) {
@@ -528,7 +565,7 @@ export const getDoctorById = async (req, res) => {
     const totalAppointments = await Appointment.countDocuments({ doctorId: doctor.userId._id });
     const totalPatients = await Appointment.distinct('patientId', { doctorId: doctor.userId._id });
     const reviews = await Review.find({ doctorId: doctor.userId._id })
-      .populate('patientId', 'firstName lastName')
+      .populate('patientId', 'firstName lastName profileImage')
       .sort({ createdAt: -1 })
       .limit(10);
 
@@ -593,13 +630,15 @@ export const updateDoctor = async (req, res) => {
 export const rejectDoctor = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
-    if (!doctor) {
+    if (!doctor || (doctor.isDeleted === true)) {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_NOT_FOUND });
     }
 
-    // Optionally delete or mark as rejected
-    await Doctor.findByIdAndDelete(req.params.id);
-    // Or keep and mark: doctor.isApproved = false; await doctor.save();
+    // Soft delete doctor (mark as rejected and deleted)
+    doctor.isApproved = false;
+    doctor.isDeleted = true;
+    doctor.deletedAt = new Date();
+    await doctor.save();
 
     res.json({ message: ADMIN_MESSAGES.DOCTOR_REJECTED_SUCCESSFULLY });
   } catch (error) {
@@ -613,7 +652,7 @@ export const rejectDoctor = async (req, res) => {
 export const suspendDoctor = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id).populate('userId');
-    if (!doctor) {
+    if (!doctor || (doctor.isDeleted === true)) {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_NOT_FOUND });
     }
 
@@ -632,7 +671,7 @@ export const suspendDoctor = async (req, res) => {
 export const activateDoctor = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id).populate('userId');
-    if (!doctor) {
+    if (!doctor || (doctor.isDeleted === true)) {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_NOT_FOUND });
     }
 
@@ -651,14 +690,21 @@ export const activateDoctor = async (req, res) => {
 export const deleteDoctor = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
-    if (!doctor) {
+    if (!doctor || (doctor.isDeleted === true)) {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_NOT_FOUND });
     }
 
-    // Delete associated user
-    await User.findByIdAndDelete(doctor.userId);
-    // Delete doctor profile
-    await Doctor.findByIdAndDelete(req.params.id);
+    // Soft delete doctor
+    doctor.isDeleted = true;
+    doctor.deletedAt = new Date();
+    await doctor.save();
+
+    // Also deactivate the associated user account
+    const user = await User.findById(doctor.userId);
+    if (user) {
+      user.isActive = false;
+      await user.save();
+    }
 
     res.json({ message: ADMIN_MESSAGES.DOCTOR_DELETED_SUCCESSFULLY });
   } catch (error) {

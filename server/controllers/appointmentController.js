@@ -52,12 +52,25 @@ export const getAvailableSlots = async (req, res) => {
     const bookedSlots = existingAppointments.map(apt => apt.timeSlot.start);
 
     // Filter available slots
-    const availableSlots = dayAvailability.timeSlots
+    let availableSlots = dayAvailability.timeSlots
       .filter(slot => slot.isAvailable && !bookedSlots.includes(slot.start))
       .map(slot => ({
         start: slot.start,
         end: slot.end
       }));
+
+    // Filter out past time slots if the selected date is today
+    const today = new Date();
+    const isToday = selectedDate.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      const currentTime = today.getHours() * 60 + today.getMinutes(); // Current time in minutes
+      availableSlots = availableSlots.filter(slot => {
+        const [hours, minutes] = slot.start.split(':').map(Number);
+        const slotTime = hours * 60 + minutes;
+        return slotTime > currentTime; // Only show future slots
+      });
+    }
 
     res.json({
       available: availableSlots.length > 0,
@@ -73,7 +86,7 @@ export const getAvailableSlots = async (req, res) => {
 // @access  Private
 export const createAppointment = async (req, res) => {
   try {
-    const { doctorId, appointmentDate, timeSlot, reasonForVisit, symptoms } = req.body;
+    const { doctorId, appointmentDate, timeSlot, reasonForVisit, symptoms, paymentGateway } = req.body;
 
     // Validate required fields
     if (!doctorId || !appointmentDate || !timeSlot) {
@@ -113,6 +126,24 @@ export const createAppointment = async (req, res) => {
       consultationFee: doctor.consultationFee,
       status: DEFAULT_APPOINTMENT_STATUS
     });
+
+    // Create payment record if paymentGateway is provided
+    if (paymentGateway) {
+      const Payment = (await import('../models/Payment.js')).default;
+      const { PAYMENT_GATEWAYS, PAYMENT_STATUSES, PAYMENT_TYPES } = await import('../constants/index.js');
+      
+      await Payment.create({
+        appointmentId: appointment._id,
+        patientId: req.user._id,
+        doctorId,
+        amount: doctor.consultationFee,
+        currency: 'INR',
+        paymentGateway: paymentGateway === 'online' ? PAYMENT_GATEWAYS.RAZORPAY : PAYMENT_GATEWAYS.OFFLINE,
+        paymentMethod: paymentGateway === 'online' ? 'online' : 'cash',
+        paymentType: PAYMENT_TYPES.APPOINTMENT,
+        status: paymentGateway === 'offline' ? PAYMENT_STATUSES.PENDING : PAYMENT_STATUSES.PENDING
+      });
+    }
 
     const populatedAppointment = await Appointment.findById(appointment._id)
       .populate('doctorId', 'firstName lastName specialization profileImage')

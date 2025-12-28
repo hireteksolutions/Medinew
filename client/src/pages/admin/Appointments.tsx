@@ -223,10 +223,7 @@ export default function Appointments() {
     total: appointments.length,
     pending: appointments.filter(a => a.status === APPOINTMENT_STATUSES.PENDING).length,
     completed: appointments.filter(a => a.status === APPOINTMENT_STATUSES.COMPLETED).length,
-    cancelled: appointments.filter(a => a.status === APPOINTMENT_STATUSES.CANCELLED).length,
-    totalRevenue: appointments
-      .filter(a => a.paymentStatus === 'paid')
-      .reduce((sum, a) => sum + (a.consultationFee || 0), 0)
+    cancelled: appointments.filter(a => a.status === APPOINTMENT_STATUSES.CANCELLED).length
   };
 
   return (
@@ -250,7 +247,7 @@ export default function Appointments() {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="card bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <div className="flex items-center justify-between">
             <div>
@@ -276,15 +273,6 @@ export default function Appointments() {
               <p className="text-2xl font-bold text-green-900">{stats.completed}</p>
             </div>
             <CheckCircle className="w-8 h-8 text-green-500" />
-          </div>
-        </div>
-        <div className="card bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-amber-700 mb-1">Revenue</p>
-              <p className="text-2xl font-bold text-amber-900">₹{stats.totalRevenue.toFixed(2)}</p>
-            </div>
-            <Calendar className="w-8 h-8 text-amber-500" />
           </div>
         </div>
       </div>

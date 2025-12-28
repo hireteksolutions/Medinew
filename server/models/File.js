@@ -87,9 +87,27 @@ const fileSchema = new mongoose.Schema({
   relatedEntity: {
     type: {
       type: String,
-      enum: RELATED_ENTITY_TYPE_VALUES
+      enum: {
+        values: RELATED_ENTITY_TYPE_VALUES,
+        message: '`{VALUE}` is not a valid enum value for path `{PATH}`'
+      },
+      required: false
     },
-    id: mongoose.Schema.Types.ObjectId
+    id: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: false,
+      default: null,
+      validate: {
+        validator: function(value) {
+          // If type is provided, id must also be provided and valid
+          if (this.type && (!value || !mongoose.Types.ObjectId.isValid(value))) {
+            return false;
+          }
+          return true;
+        },
+        message: 'relatedEntity.id must be a valid ObjectId when relatedEntity.type is provided'
+      }
+    }
   },
   
   // Metadata
