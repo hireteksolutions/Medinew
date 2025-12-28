@@ -1,4 +1,5 @@
 import Notification from '../models/Notification.js';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination.js';
 import {
   markAsRead,
   markMultipleAsRead,
@@ -14,32 +15,32 @@ import { NOTIFICATION_MESSAGES } from '../constants/messages.js';
 export const getNotifications = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { type, isRead, priority, page = 1, limit = 20 } = req.query;
+    const { type, isRead, priority } = req.query;
+
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
 
     const query = { userId };
     if (type) query.type = type;
     if (isRead !== undefined) query.isRead = isRead === 'true';
     if (priority) query.priority = priority;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const notifications = await Notification.find(query)
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip(skip);
-
+    // Get total count before pagination
     const total = await Notification.countDocuments(query);
     const unreadCount = await Notification.countDocuments({ userId, isRead: false });
 
+    const notifications = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(limit);
+
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
     res.json({
       success: true,
-      data: notifications,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      },
+      notifications,
+      pagination,
       unreadCount
     });
   } catch (error) {
@@ -221,26 +222,25 @@ export const getNotificationsByType = async (req, res) => {
   try {
     const { type } = req.params;
     const userId = req.user._id || req.user.id;
-    const { page = 1, limit = 20 } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // Get total count before pagination
+    const total = await Notification.countDocuments({ userId, type });
 
     const notifications = await Notification.find({ userId, type })
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip(skip);
+      .skip(offset)
+      .limit(limit);
 
-    const total = await Notification.countDocuments({ userId, type });
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
 
     res.json({
       success: true,
-      data: notifications,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      notifications,
+      pagination
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

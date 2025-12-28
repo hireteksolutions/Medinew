@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { Calendar, X, Star, Clock, MoreVertical, IndianRupee } from 'lucide-react';
 import { APPOINTMENT_STATUSES, APPOINTMENT_FILTERS, canCancelAppointment, TOAST_MESSAGES } from '../../constants';
 import Badge from '../../components/common/Badge';
+import Pagination from '../../components/common/Pagination';
 
 export default function Appointments() {
   const { showLoader, hideLoader } = useLoader();
@@ -20,10 +21,26 @@ export default function Appointments() {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const navigate = useNavigate();
+  
+  // Pagination state
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(5);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    limit: 5,
+    offset: 0,
+    page: 1,
+    pages: 0
+  });
+
+  // Reset to first page when filter changes
+  useEffect(() => {
+    setOffset(0);
+  }, [filter]);
 
   useEffect(() => {
     fetchAppointments();
-  }, [filter]);
+  }, [filter, offset]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -45,20 +62,35 @@ export default function Appointments() {
     setLoading(true);
     try {
       showLoader('Loading appointments...');
-      const params: any = {};
+      const params: any = { 
+        offset: offset,
+        limit: limit
+      };
       if (filter === APPOINTMENT_FILTERS.UPCOMING) {
         params.upcoming = 'true';
       } else if (filter === APPOINTMENT_FILTERS.PAST) {
         params.status = APPOINTMENT_STATUSES.COMPLETED;
       }
       const response = await patientService.getAppointments(params);
-      setAppointments(response.data);
+      // Handle paginated response structure: { appointments: [...], pagination: {...} }
+      const appointmentsData = response.data?.appointments || response.data || [];
+      setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
+      
+      // Update pagination state
+      if (response.data?.pagination) {
+        setPagination(response.data.pagination);
+      }
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_APPOINTMENTS_FAILED);
     } finally {
       setLoading(false);
       hideLoader();
     }
+  };
+
+  const handlePageChange = (newOffset: number) => {
+    setOffset(newOffset);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCancel = async (id: string) => {
@@ -312,6 +344,15 @@ export default function Appointments() {
               </tbody>
             </table>
           </div>
+          {/* Pagination */}
+          {pagination.total > 0 && (
+            <Pagination
+              total={pagination.total}
+              limit={pagination.limit || limit}
+              offset={pagination.offset || offset}
+              onPageChange={handlePageChange}
+            />
+          )}
         </div>
       )}
 

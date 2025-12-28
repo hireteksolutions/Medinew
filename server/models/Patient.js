@@ -12,6 +12,18 @@ const patientSchema = new mongoose.Schema({
     type: String,
     enum: BLOOD_GROUP_VALUES
   },
+  height: {
+    type: Number, // in cm
+    min: 0
+  },
+  weight: {
+    type: Number, // in kg
+    min: 0
+  },
+  bmi: {
+    type: Number,
+    min: 0
+  },
   allergies: [{
     type: String,
     trim: true
@@ -116,7 +128,15 @@ const patientSchema = new mongoose.Schema({
   favoriteDoctors: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Doctor'
-  }]
+  }],
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  }
 }, {
   timestamps: true
 });

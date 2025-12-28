@@ -11,6 +11,7 @@ import {
   PAYMENT_TYPES,
 } from '../constants/index.js';
 import { PAYMENT_MESSAGES, APPOINTMENT_MESSAGES, AUTHZ_MESSAGES } from '../constants/messages.js';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination.js';
 
 /**
  * @desc    Create payment for an appointment
@@ -45,55 +46,71 @@ export const createPayment = async (req, res) => {
     }
 
     // Check if payment already exists for this appointment
-    const existingPayment = await Payment.findOne({ appointmentId, status: { $ne: PAYMENT_STATUSES.CANCELLED } });
-    if (existingPayment && existingPayment.status !== PAYMENT_STATUSES.FAILED) {
+    let existingPayment = await Payment.findOne({ appointmentId, status: { $ne: PAYMENT_STATUSES.CANCELLED } });
+    
+    // If payment exists and is already completed, don't allow creating a new one
+    if (existingPayment && existingPayment.status === PAYMENT_STATUSES.COMPLETED) {
       return res.status(400).json({
-        message: 'Payment already exists for this appointment',
+        message: 'Payment already exists and is completed for this appointment',
         payment: existingPayment,
       });
-    }
-
-    // Determine payment gateway based on payment method
-    let gateway = paymentGateway;
-    if (!gateway) {
-      if (paymentMethod === PAYMENT_METHODS.CASH || paymentMethod === PAYMENT_METHODS.CHEQUE) {
-        gateway = PAYMENT_GATEWAYS.OFFLINE;
-      } else if (paymentMethod === PAYMENT_METHODS.ONLINE) {
-        // Default to first available online gateway
-        gateway = PAYMENT_GATEWAYS.STRIPE; // Can be changed to preferred gateway
-      } else {
-        // Default to OFFLINE for other methods
-        gateway = PAYMENT_GATEWAYS.OFFLINE;
-      }
     }
 
     // Get payment amount from appointment
     const amount = appointment.consultationFee || 0;
 
-    // Create payment record
-    const paymentData = {
-      appointmentId: appointment._id,
-      patientId: appointment.patientId._id,
-      doctorId: appointment.doctorId._id,
-      amount,
-      currency: 'INR',
-      paymentMethod,
-      paymentType: PAYMENT_TYPES.APPOINTMENT,
-      paymentGateway: gateway,
-      status: PAYMENT_STATUSES.PENDING,
-      metadata: metadata || {},
-    };
+    // Determine payment gateway
+    let gateway = paymentGateway;
+    if (!gateway) {
+      if (paymentMethod === PAYMENT_METHODS.CASH || paymentMethod === PAYMENT_METHODS.CHEQUE) {
+        gateway = PAYMENT_GATEWAYS.OFFLINE;
+      } else if (paymentMethod === PAYMENT_METHODS.ONLINE) {
+        gateway = PAYMENT_GATEWAYS.RAZORPAY; // Default to Razorpay
+      } else {
+        gateway = PAYMENT_GATEWAYS.OFFLINE;
+      }
+    }
 
-    // If online payment, create payment with gateway
+    // If payment exists but is PENDING or FAILED, update it instead of creating a new one
+    let payment;
+    if (existingPayment && (existingPayment.status === PAYMENT_STATUSES.PENDING || existingPayment.status === PAYMENT_STATUSES.FAILED)) {
+      // Update existing payment with new payment method/gateway if provided
+      existingPayment.paymentMethod = paymentMethod || existingPayment.paymentMethod;
+      existingPayment.paymentGateway = gateway || existingPayment.paymentGateway;
+      existingPayment.status = PAYMENT_STATUSES.PENDING;
+      if (metadata) {
+        existingPayment.metadata = { ...existingPayment.metadata, ...metadata };
+      }
+      payment = existingPayment;
+      gateway = payment.paymentGateway; // Use the payment's gateway
+      // Save the updated payment
+      await payment.save();
+    } else {
+      // No existing payment, create a new one
+      payment = await Payment.create({
+        appointmentId: appointment._id,
+        patientId: appointment.patientId._id,
+        doctorId: appointment.doctorId._id,
+        amount,
+        currency: 'INR',
+        paymentMethod,
+        paymentType: PAYMENT_TYPES.APPOINTMENT,
+        paymentGateway: gateway,
+        status: PAYMENT_STATUSES.PENDING,
+        metadata: metadata || {},
+      });
+    }
+
+    // If online payment, create/update payment with gateway (only if not already created)
     let gatewayResponse = null;
-    if (gateway !== PAYMENT_GATEWAYS.OFFLINE) {
+    if (gateway !== PAYMENT_GATEWAYS.OFFLINE && !payment.gatewayOrderId) {
       try {
         const gatewayConfig = PaymentGatewayFactory.getGatewayConfig(gateway);
         const paymentGatewayInstance = PaymentGatewayFactory.createGateway(gateway, gatewayConfig);
 
         const gatewayData = await paymentGatewayInstance.createPayment({
           amount,
-          currency: paymentData.currency,
+          currency: 'INR',
           receipt: `APT-${appointment.appointmentNumber}`,
           metadata: {
             appointmentId: appointment._id.toString(),
@@ -102,24 +119,27 @@ export const createPayment = async (req, res) => {
           },
         });
 
-        paymentData.transactionId = gatewayData.transactionId;
-        paymentData.gatewayTransactionId = gatewayData.transactionId;
-        paymentData.gatewayOrderId = gatewayData.orderId || gatewayData.transactionId;
-        paymentData.paymentIntentId = gatewayData.paymentIntentId || gatewayData.clientSecret;
-        paymentData.gatewayResponse = gatewayData;
+        // Update payment with gateway data
+        payment.transactionId = gatewayData.transactionId;
+        payment.gatewayTransactionId = gatewayData.transactionId;
+        payment.gatewayOrderId = gatewayData.orderId || gatewayData.transactionId;
+        payment.paymentIntentId = gatewayData.paymentIntentId || gatewayData.clientSecret;
+        payment.gatewayResponse = gatewayData;
         gatewayResponse = gatewayData;
+        await payment.save();
       } catch (error) {
         console.error('Payment gateway error:', error);
-        paymentData.gatewayError = {
+        payment.gatewayError = {
           code: error.code || 'GATEWAY_ERROR',
           message: error.message,
           details: error,
         };
+        await payment.save();
       }
+    } else if (gateway !== PAYMENT_GATEWAYS.OFFLINE && payment.gatewayOrderId) {
+      // If gateway order already exists, return existing gateway response
+      gatewayResponse = payment.gatewayResponse;
     }
-
-    // Create payment
-    const payment = await Payment.create(paymentData);
 
     // Populate payment
     const populatedPayment = await Payment.findById(payment._id)
@@ -176,7 +196,11 @@ export const getPayment = async (req, res) => {
  */
 export const getPayments = async (req, res) => {
   try {
-    const { status, paymentMethod, limit = 50, page = 1 } = req.query;
+    const { status, paymentMethod } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+    
     const query = {};
 
     // Filter based on user role
@@ -195,24 +219,23 @@ export const getPayments = async (req, res) => {
       query.paymentMethod = paymentMethod;
     }
 
+    // Get total count before pagination
+    const total = await Payment.countDocuments(query);
+
     const payments = await Payment.find(query)
       .populate('appointmentId', 'appointmentNumber appointmentDate timeSlot')
       .populate('patientId', 'firstName lastName email')
       .populate('doctorId', 'firstName lastName specialization')
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .skip(offset)
+      .limit(limit);
 
-    const total = await Payment.countDocuments(query);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
 
     res.json({
       payments,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit)),
-      },
+      pagination
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

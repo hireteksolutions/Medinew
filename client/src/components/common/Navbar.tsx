@@ -4,6 +4,7 @@ import { Menu, X, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { PROJECT_CONFIG } from '../../config';
 import { NotificationDropdown } from './NotificationDropdown';
+import { USER_ROLES, getDashboardPath } from '../../constants';
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
@@ -15,11 +16,25 @@ export const Navbar = () => {
     navigate('/');
   };
 
+  const handleLogoClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (user) {
+      e.preventDefault();
+      // Redirect to dashboard based on user role
+      const dashboardRoute = getDashboardPath(user.role);
+      navigate(dashboardRoute);
+    }
+    // If no user, let the default Link behavior navigate to home page
+  };
+
   return (
     <nav className="bg-white shadow-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <Link to="/" className="flex items-center space-x-2">
+          <Link 
+            to={user ? getDashboardPath(user.role) : "/"} 
+            onClick={handleLogoClick}
+            className="flex items-center space-x-2"
+          >
             <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-xl">{PROJECT_CONFIG.shortName}</span>
             </div>

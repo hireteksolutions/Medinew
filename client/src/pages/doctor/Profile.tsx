@@ -46,8 +46,8 @@ export default function Profile() {
         authService.getMe(),
       ]);
       setProfile(profileRes.data);
-      const userData = userRes.data.user;
-      setProfileImage(userData.profileImage || '');
+      const userData = userRes.data?.user;
+      setProfileImage(userData?.profileImage || '');
       setValue('specialization', profileRes.data.specialization);
       setValue('consultationFee', profileRes.data.consultationFee);
       setValue('experience', profileRes.data.experience);
@@ -93,7 +93,9 @@ export default function Profile() {
       await authService.updateProfile({ profileImage: imageUrl });
       
       setProfileImage(imageUrl);
-      updateUser({ ...user, profileImage: imageUrl });
+      if (user) {
+        updateUser({ ...user, profileImage: imageUrl });
+      }
       toast.success('Profile photo updated successfully!');
     } catch (error: any) {
       console.error('Error uploading image:', error);
@@ -166,7 +168,9 @@ export default function Profile() {
                     try {
                       await authService.updateProfile({ profileImage: '' });
                       setProfileImage('');
-                      updateUser({ ...user, profileImage: '' });
+                      if (user) {
+                        updateUser({ ...user, profileImage: '' });
+                      }
                       toast.success('Profile photo removed');
                     } catch (error) {
                       toast.error('Failed to remove profile photo');

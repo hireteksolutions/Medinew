@@ -149,6 +149,14 @@ export const authService = {
   updateProfile: (data: any) => {
     return api.put(`${API_ROUTES.AUTH}${AUTH_ROUTES.PROFILE}`, data);
   },
+
+  forgotPassword: (email: string) => {
+    return api.post(`${API_ROUTES.AUTH}/forgot-password`, { email });
+  },
+
+  resetPassword: (token: string, password: string) => {
+    return api.post(`${API_ROUTES.AUTH}/reset-password`, { token, password });
+  },
 };
 
 export const doctorService = {
@@ -204,8 +212,8 @@ export const patientService = {
     return api.get(`${API_ROUTES.PATIENT}${PATIENT_ROUTES.APPOINTMENTS}`, { params });
   },
 
-  getMedicalRecords: () => {
-    return api.get(`${API_ROUTES.PATIENT}${PATIENT_ROUTES.MEDICAL_RECORDS}`);
+  getMedicalRecords: (params?: any) => {
+    return api.get(`${API_ROUTES.PATIENT}${PATIENT_ROUTES.MEDICAL_RECORDS}`, { params });
   },
 
   uploadMedicalRecord: (data: any) => {
@@ -226,6 +234,30 @@ export const patientService = {
 
   removeFavoriteDoctor: (doctorId: string) => {
     return api.delete(`${API_ROUTES.PATIENT}${PATIENT_ROUTES.getFavoriteDoctorById(doctorId)}`);
+  },
+
+  getConsultationHistory: (params?: any) => {
+    return api.get(`${API_ROUTES.PATIENT}/consultation-history`, { params });
+  },
+
+  getConsultationDetails: (id: string) => {
+    return api.get(`${API_ROUTES.PATIENT}/consultation-history/${id}`);
+  },
+
+  getDoctorsForSwitch: (params: { appointmentId: string; sameSpecialization?: boolean }) => {
+    return api.get(`${API_ROUTES.PATIENT}/doctors-for-switch`, { params });
+  },
+
+  getEmergencyInfo: () => {
+    return api.get(`${API_ROUTES.PATIENT}/emergency-info`);
+  },
+
+  getIncompleteTreatments: () => {
+    return api.get(`${API_ROUTES.PATIENT}/incomplete-treatments`);
+  },
+
+  getDoctorRecommendations: (appointmentId: string) => {
+    return api.get(`${API_ROUTES.PATIENT}/doctor-recommendations`, { params: { appointmentId } });
   },
 };
 
@@ -252,6 +284,14 @@ export const doctorDashboardService = {
 
   getPatientHistory: (patientId: string) => {
     return api.get(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.getPatientHistory(patientId)}`);
+  },
+
+  getCompletePatientHistory: (patientId: string, params?: any) => {
+    return api.get(`${API_ROUTES.DOCTOR}/patients/${patientId}/complete-history`, { params });
+  },
+
+  referPatient: (appointmentId: string, data: { doctorId: string; reason: string }) => {
+    return api.post(`${API_ROUTES.DOCTOR}/appointments/${appointmentId}/refer`, data);
   },
 
   getSchedule: (params?: { startDate?: string; endDate?: string }) => {
@@ -383,6 +423,71 @@ export const adminService = {
 
   getNoShowAnalysis: (params?: any) => {
     return api.get(`${API_ROUTES.ADMIN}/reports/no-shows`, { params });
+  },
+
+  // Settings
+  getSettings: () => {
+    return api.get(`${API_ROUTES.ADMIN}/settings`);
+  },
+  updateSettings: (data: any) => {
+    return api.put(`${API_ROUTES.ADMIN}/settings`, data);
+  },
+
+  // Email Templates
+  getEmailTemplates: (params?: any) => {
+    return api.get(`${API_ROUTES.ADMIN}/email-templates`, { params });
+  },
+  getEmailTemplateById: (id: string) => {
+    return api.get(`${API_ROUTES.ADMIN}/email-templates/${id}`);
+  },
+  createEmailTemplate: (data: any) => {
+    return api.post(`${API_ROUTES.ADMIN}/email-templates`, data);
+  },
+  updateEmailTemplate: (id: string, data: any) => {
+    return api.put(`${API_ROUTES.ADMIN}/email-templates/${id}`, data);
+  },
+  deleteEmailTemplate: (id: string) => {
+    return api.delete(`${API_ROUTES.ADMIN}/email-templates/${id}`);
+  },
+
+  // Roles
+  getRoles: (params?: any) => {
+    return api.get(`${API_ROUTES.ADMIN}/roles`, { params });
+  },
+  getRoleById: (id: string) => {
+    return api.get(`${API_ROUTES.ADMIN}/roles/${id}`);
+  },
+  getPermissions: () => {
+    return api.get(`${API_ROUTES.ADMIN}/roles/permissions`);
+  },
+  createRole: (data: any) => {
+    return api.post(`${API_ROUTES.ADMIN}/roles`, data);
+  },
+  updateRole: (id: string, data: any) => {
+    return api.put(`${API_ROUTES.ADMIN}/roles/${id}`, data);
+  },
+  deleteRole: (id: string) => {
+    return api.delete(`${API_ROUTES.ADMIN}/roles/${id}`);
+  },
+  assignRoleToUser: (userId: string, roleId: string | null) => {
+    return api.put(`${API_ROUTES.ADMIN}/users/${userId}/role`, { roleId });
+  },
+
+  // Specializations (Admin CRUD)
+  getSpecializations: (params?: any) => {
+    return api.get(`${API_ROUTES.ADMIN}/specializations`, { params });
+  },
+  getSpecializationById: (id: string) => {
+    return api.get(`${API_ROUTES.ADMIN}/specializations/${id}`);
+  },
+  createSpecialization: (data: any) => {
+    return api.post(`${API_ROUTES.ADMIN}/specializations`, data);
+  },
+  updateSpecialization: (id: string, data: any) => {
+    return api.put(`${API_ROUTES.ADMIN}/specializations/${id}`, data);
+  },
+  deleteSpecialization: (id: string) => {
+    return api.delete(`${API_ROUTES.ADMIN}/specializations/${id}`);
   },
 };
 

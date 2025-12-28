@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import Badge from '../../components/common/Badge';
 import { APPOINTMENT_STATUSES } from '../../constants';
+import Pagination from '../../components/common/Pagination';
 
 export default function Patients() {
   const [patients, setPatients] = useState<any[]>([]);
@@ -12,27 +13,53 @@ export default function Patients() {
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [patientHistory, setPatientHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Pagination state
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(10);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    limit: 10,
+    offset: 0,
+    page: 1,
+    pages: 0
+  });
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    setOffset(0);
+  }, [searchTerm]);
 
   useEffect(() => {
     fetchPatients();
-  }, []);
+  }, [offset]);
 
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const response = await doctorDashboardService.getPatients();
+      const params: any = {
+        offset: offset,
+        limit: limit
+      };
+      const response = await doctorDashboardService.getPatients(params);
       
-      // API returns array directly in response.data
+      // Handle paginated response structure: { patients: [...], pagination: {...} }
       let patientsData: any[] = [];
-      if (Array.isArray(response.data)) {
+      if (response.data?.patients) {
+        patientsData = response.data.patients;
+      } else if (Array.isArray(response.data)) {
         patientsData = response.data;
       } else if (response.data && Array.isArray(response.data.data)) {
         patientsData = response.data.data;
-      } else if (response.data && Array.isArray(response.data.patients)) {
-        patientsData = response.data.patients;
       }
       
-      setPatients(patientsData);
+      setPatients(Array.isArray(patientsData) ? patientsData : []);
+      
+      // Update pagination state
+      if (response.data?.pagination) {
+        setPagination(response.data.pagination);
+      }
     } catch (error: any) {
       console.error('Error fetching patients:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to load patients';
@@ -43,7 +70,10 @@ export default function Patients() {
     }
   };
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const handlePageChange = (newOffset: number) => {
+    setOffset(newOffset);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const filteredPatients = patients.filter((patient: any) => {
     if (!searchTerm) return true;
@@ -264,6 +294,15 @@ export default function Patients() {
               </tbody>
             </table>
           </div>
+          {/* Pagination */}
+          {pagination.total > 0 && (
+            <Pagination
+              total={pagination.total}
+              limit={pagination.limit || limit}
+              offset={pagination.offset || offset}
+              onPageChange={handlePageChange}
+            />
+          )}
         </div>
       )}
 

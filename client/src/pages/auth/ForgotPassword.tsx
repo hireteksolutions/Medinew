@@ -9,6 +9,9 @@ import { VALIDATION_MESSAGES, VALIDATION_PATTERNS, VALIDATION_RULES } from '../.
 import { PROJECT_CONFIG } from '../../config';
 import { Lock, Mail, Eye, EyeOff, ArrowLeft, Key, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { authService } from '../../services/api';
+import { TOAST_MESSAGES } from '../../constants';
+import { encryptPassword } from '../../utils/encryption';
 
 // Schema for reset password (when user knows old password)
 const resetPasswordSchema = z.object({
@@ -73,10 +76,15 @@ export default function ForgotPassword() {
   const onForgotPassword = async (data: ForgotPasswordFormData) => {
     setLoading(true);
     try {
-      // TODO: Implement API call to send password reset link
-      // await authService.forgotPassword(data.email);
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
-      toast.success(TOAST_MESSAGES.PASSWORD_RESET_LINK_SENT);
+      const response = await authService.forgotPassword(data.email.toLowerCase().trim());
+      toast.success(response.data?.message || TOAST_MESSAGES.PASSWORD_RESET_LINK_SENT);
+      
+      // In development, show the reset token if provided
+      if (response.data?.resetToken && process.env.NODE_ENV === 'development') {
+        console.log('Reset Token (dev only):', response.data.resetToken);
+        toast.success(`Reset Token: ${response.data.resetToken}`, { duration: 10000 });
+      }
+      
       forgotForm.reset();
     } catch (error: any) {
       toast.error(error.response?.data?.message || TOAST_MESSAGES.PASSWORD_RESET_LINK_FAILED);

@@ -7,6 +7,9 @@ import crypto from 'crypto';
 import { USER_ROLES, CRYPTO, TIME_CONSTANTS, HTTP_STATUS } from '../constants/index.js';
 import { AUTH_MESSAGES, GENERAL_MESSAGES } from '../constants/messages.js';
 import { parseUserAgent, getClientIP, generateSessionId } from '../utils/deviceDetection.js';
+import { createAuditLog } from '../utils/auditLogger.js';
+import { getSessionTimeoutMs } from '../services/adminSettingsService.js';
+import { decryptPassword } from '../utils/encryption.js';
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -18,7 +21,10 @@ export const register = async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
     }
 
-    const { email, password, firstName, lastName, phone, role, dateOfBirth, gender, address, licenseNumber, specialization } = req.body;
+    const { email, password: encryptedPassword, firstName, lastName, phone, role, dateOfBirth, gender, address, licenseNumber, specialization, education, languages } = req.body;
+
+    // Decrypt password (if encrypted) - backward compatible with non-encrypted passwords
+    const password = encryptedPassword ? decryptPassword(encryptedPassword) : '';
 
     // Check if email already exists
     const emailExists = await User.findOne({ email });
@@ -30,6 +36,14 @@ export const register = async (req, res) => {
     const phoneExists = await User.findOne({ phone });
     if (phoneExists) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: AUTH_MESSAGES.PHONE_ALREADY_REGISTERED });
+    }
+
+    // Block admin registration through public registration endpoint
+    // Admins must be created by existing admins through admin management endpoints
+    if (role === USER_ROLES.ADMIN) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({ 
+        message: 'Admin registration is not allowed through public registration. Please contact system administrator.' 
+      });
     }
 
     // Validate doctor-specific fields
@@ -91,6 +105,8 @@ export const register = async (req, res) => {
             userId: createdUser._id,
             licenseNumber: licenseNumber.trim().toUpperCase(),
             specialization: specialization.trim(),
+            education: education && Array.isArray(education) ? education.filter(edu => edu.degree || edu.institution) : [],
+            languages: languages && Array.isArray(languages) ? languages.filter(lang => lang && lang.trim()) : [],
             consultationFee: 0, // Default consultation fee, can be updated later in profile
             isApproved: false // Doctors need admin approval
           });
@@ -102,6 +118,20 @@ export const register = async (req, res) => {
       }
 
       const finalUser = createdUser;
+
+      // Log registration
+      await createAuditLog({
+        user: finalUser,
+        action: 'register',
+        entityType: 'user',
+        entityId: finalUser._id,
+        method: 'POST',
+        endpoint: req.originalUrl,
+        status: 'success',
+        statusCode: HTTP_STATUS.CREATED,
+        metadata: { role: finalUser.role },
+        req
+      });
 
       // For doctors, don't generate token - they need admin approval first
       if (role === USER_ROLES.DOCTOR) {
@@ -119,8 +149,8 @@ export const register = async (req, res) => {
       }
 
       // Generate tokens for patients and other roles
-      const accessToken = finalUser.generateAccessToken();
-      const refreshToken = finalUser.generateRefreshToken();
+      const accessToken = await finalUser.generateAccessToken();
+      const refreshToken = await finalUser.generateRefreshToken();
 
       // Get device information
       const userAgent = req.headers['user-agent'] || '';
@@ -131,8 +161,9 @@ export const register = async (req, res) => {
       // Hash refresh token
       const refreshTokenHash = await UserSession.hashRefreshToken(refreshToken);
 
-      // Calculate expiration (30 days from now)
-      const expiresAt = new Date(Date.now() + TIME_CONSTANTS.SESSION_EXPIRE_MS);
+      // Calculate expiration using configurable session timeout
+      const sessionTimeoutMs = await getSessionTimeoutMs();
+      const expiresAt = new Date(Date.now() + sessionTimeoutMs);
 
       // Create session
       await UserSession.create({
@@ -162,6 +193,8 @@ export const register = async (req, res) => {
           role: finalUser.role
         }
       });
+      
+      // Log successful registration (already logged above, but ensure it's logged for non-doctor roles)
     } catch (error) {
       // If it's a validation error, return specific message
       if (error.name === 'ValidationError') {
@@ -257,17 +290,90 @@ export const login = async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
     }
 
-    const { email, password } = req.body;
+    const { email, password: encryptedPassword } = req.body;
+
+    // Validate input
+    if (!email || !encryptedPassword) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        message: 'Email and password are required' 
+      });
+    }
+
+    // Decrypt password (if encrypted) - backward compatible with non-encrypted passwords
+    const password = decryptPassword(encryptedPassword);
+
+    // Debug logging (remove in production)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Login attempt:', {
+        email: email,
+        encryptedPasswordLength: encryptedPassword?.length,
+        decryptedPasswordLength: password?.length,
+        passwordStartsWith: password?.substring(0, 3) + '...'
+      });
+    }
+
+    // Sanitize and validate password (basic validation)
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        message: 'Invalid password format' 
+      });
+    }
+
+    // Sanitize email
+    const sanitizedEmail = email.toLowerCase().trim();
 
     // Check if user exists and get password
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: sanitizedEmail }).select('+password');
     if (!user) {
+      // Log failed login attempt (user not found)
+      await createAuditLog({
+        user: { _id: null, role: 'unknown' },
+        action: 'login',
+        entityType: 'user',
+        method: 'POST',
+        endpoint: req.originalUrl,
+        status: 'failure',
+        statusCode: HTTP_STATUS.UNAUTHORIZED,
+        errorMessage: 'User not found',
+        metadata: { email },
+        req
+      });
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: AUTH_MESSAGES.INVALID_CREDENTIALS });
     }
 
     // Check password
+    // SECURITY NOTE: 
+    // - Passwords are sent over HTTPS (encrypted in transit)
+    // - Passwords are hashed with bcrypt before storage (never stored in plain text)
+    // - The password field in the database contains a bcrypt hash, not the plain text password
+    // - We compare the plain text password from the request with the stored hash using bcrypt.compare
     const isMatch = await user.matchPassword(password);
+    
+    // Debug logging (remove in production)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Password verification:', {
+        email: sanitizedEmail,
+        isMatch: isMatch,
+        decryptedPasswordLength: password?.length,
+        hasStoredPassword: !!user.password
+      });
+    }
+    
     if (!isMatch) {
+      // Log failed login attempt (wrong password)
+      await createAuditLog({
+        user: { _id: user._id, role: user.role },
+        action: 'login',
+        entityType: 'user',
+        entityId: user._id,
+        method: 'POST',
+        endpoint: req.originalUrl,
+        status: 'failure',
+        statusCode: HTTP_STATUS.UNAUTHORIZED,
+        errorMessage: 'Invalid password',
+        metadata: { email: user.email },
+        req
+      });
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: AUTH_MESSAGES.INVALID_CREDENTIALS });
     }
 
@@ -289,9 +395,46 @@ export const login = async (req, res) => {
       }
     }
 
+    // Check if admin is fully approved (two-level approval required)
+    if (user.role === USER_ROLES.ADMIN) {
+      const Admin = (await import('../models/Admin.js')).default;
+      let admin = await Admin.findOne({ userId: user._id });
+      
+      // Handle legacy admins (created before approval system was implemented)
+      // Auto-approve existing admins by creating Admin record with full approval
+      if (!admin) {
+        admin = await Admin.create({
+          userId: user._id,
+          firstApproval: {
+            approvedBy: user._id, // Self-approved for legacy admins
+            approvedAt: new Date(),
+            isApproved: true
+          },
+          secondApproval: {
+            approvedBy: user._id, // Self-approved for legacy admins
+            approvedAt: new Date(),
+            isApproved: true
+          },
+          isFullyApproved: true,
+          isRejected: false
+        });
+      }
+      
+      if (admin.isRejected) {
+        return res.status(HTTP_STATUS.FORBIDDEN).json({ 
+          message: `Admin account has been rejected. Reason: ${admin.rejectionReason || 'No reason provided'}` 
+        });
+      }
+      if (!admin.isFullyApproved || !admin.firstApproval.isApproved || !admin.secondApproval.isApproved) {
+        return res.status(HTTP_STATUS.FORBIDDEN).json({ 
+          message: 'Admin account is pending approval. Your account requires approval from two administrators before you can access the system.' 
+        });
+      }
+    }
+
     // Generate tokens
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
+    const accessToken = await user.generateAccessToken();
+    const refreshToken = await user.generateRefreshToken();
 
     // Get device information
     const userAgent = req.headers['user-agent'] || '';
@@ -320,6 +463,20 @@ export const login = async (req, res) => {
       isActive: true,
       isRevoked: false,
       expiresAt
+    });
+
+    // Log successful login
+    await createAuditLog({
+      user,
+      action: 'login',
+      entityType: 'user',
+      entityId: user._id,
+      method: 'POST',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: { email: user.email, sessionId },
+      req
     });
 
     res.json({
@@ -401,7 +558,10 @@ export const forgotPassword = async (req, res) => {
 // @access  Public
 export const resetPassword = async (req, res) => {
   try {
-    const { token, password } = req.body;
+    const { token, password: encryptedPassword } = req.body;
+
+    // Decrypt password (if encrypted) - backward compatible with non-encrypted passwords
+    const password = encryptedPassword ? decryptPassword(encryptedPassword) : encryptedPassword;
 
     const resetPasswordToken = crypto.createHash('sha256').update(token).digest('hex');
 
@@ -419,6 +579,19 @@ export const resetPassword = async (req, res) => {
     user.resetPasswordExpire = undefined;
 
     await user.save();
+
+    // Log password reset
+    await createAuditLog({
+      user,
+      action: 'reset_password',
+      entityType: 'user',
+      entityId: user._id,
+      method: 'POST',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      req
+    });
 
     res.json({ message: AUTH_MESSAGES.PASSWORD_RESET_SUCCESSFUL });
   } catch (error) {
@@ -447,6 +620,20 @@ export const logout = async (req, res) => {
       }
     }
 
+    // Log logout
+    await createAuditLog({
+      user: req.user,
+      action: 'logout',
+      entityType: 'user',
+      entityId: req.user._id,
+      method: 'POST',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: { sessionId },
+      req
+    });
+
     res.json({ message: GENERAL_MESSAGES.LOGGED_OUT_SUCCESSFULLY });
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -461,6 +648,15 @@ export const updateProfile = async (req, res) => {
     const { firstName, lastName, phone, dateOfBirth, gender, address, profileImage } = req.body;
 
     const user = await User.findById(req.user._id);
+    const beforeUpdate = {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      address: user.address,
+      profileImage: user.profileImage
+    };
 
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
@@ -471,6 +667,31 @@ export const updateProfile = async (req, res) => {
     if (profileImage) user.profileImage = profileImage;
 
     await user.save();
+
+    // Log profile update
+    await createAuditLog({
+      user: req.user,
+      action: 'update_profile',
+      entityType: 'user',
+      entityId: user._id,
+      method: 'PUT',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      changes: {
+        before: beforeUpdate,
+        after: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.phone,
+          dateOfBirth: user.dateOfBirth,
+          gender: user.gender,
+          address: user.address,
+          profileImage: user.profileImage
+        }
+      },
+      req
+    });
 
     res.json({
       message: AUTH_MESSAGES.PROFILE_UPDATED_SUCCESSFULLY,

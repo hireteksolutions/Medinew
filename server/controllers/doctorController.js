@@ -2,12 +2,15 @@ import Doctor from '../models/Doctor.js';
 import User from '../models/User.js';
 import Appointment from '../models/Appointment.js';
 import Patient from '../models/Patient.js';
+import MedicalRecord from '../models/MedicalRecord.js';
 import Review from '../models/Review.js';
 import Message from '../models/Message.js';
 import Payment from '../models/Payment.js';
 import AvailabilitySchedule from '../models/AvailabilitySchedule.js';
-import { APPOINTMENT_STATUSES, MESSAGE_STATUSES, DAY_OF_WEEK_VALUES, PAYMENT_STATUSES } from '../constants/index.js';
+import { APPOINTMENT_STATUSES, MESSAGE_STATUSES, DAY_OF_WEEK_VALUES, PAYMENT_STATUSES, HTTP_STATUS } from '../constants/index.js';
 import { DOCTOR_MESSAGES, APPOINTMENT_MESSAGES, AUTH_MESSAGES } from '../constants/messages.js';
+import { getPaginationParams, buildPaginationMeta, applyPagination } from '../utils/pagination.js';
+import { createAuditLog } from '../utils/auditLogger.js';
 
 // ============================================
 // PROFILE MANAGEMENT
@@ -729,6 +732,10 @@ export const getStats = async (req, res) => {
 export const getAppointments = async (req, res) => {
   try {
     const { status, date, startDate, endDate, view, patientId } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+    
     let query = { doctorId: req.user._id };
 
     // Status filter
@@ -780,37 +787,57 @@ export const getAppointments = async (req, res) => {
       query.patientId = patientId;
     }
 
+    // Get total count before pagination
+    const total = await Appointment.countDocuments(query);
+
     // Use lean() to bypass Mongoose validation for reading (handles invalid enum values in DB)
+    // Apply pagination
     const appointments = await Appointment.find(query)
       .populate('patientId', 'firstName lastName phone email profileImage dateOfBirth gender address')
       .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(limit)
       .lean();
 
-    // Get all unique patient user IDs
-    const patientUserIds = [...new Set(appointments.map(apt => apt.patientId._id.toString()))];
+    // Get all unique patient user IDs (filter out null patientId)
+    const patientUserIds = [...new Set(
+      appointments
+        .filter(apt => apt.patientId && apt.patientId._id)
+        .map(apt => apt.patientId._id.toString())
+    )];
 
     // Fetch all patient profiles in a single query
-    const patientProfiles = await Patient.find({ userId: { $in: patientUserIds } });
+    const patientProfiles = patientUserIds.length > 0 
+      ? await Patient.find({ userId: { $in: patientUserIds } }).lean()
+      : [];
     
     // Create a map of userId -> patientProfile for quick lookup
     const patientProfileMap = new Map();
     patientProfiles.forEach(profile => {
-      patientProfileMap.set(profile.userId.toString(), profile);
+      if (profile.userId) {
+        patientProfileMap.set(profile.userId.toString(), profile);
+      }
     });
 
     // Get payment information for all appointments
     const appointmentIds = appointments.map(apt => apt._id);
-    const payments = await Payment.find({ appointmentId: { $in: appointmentIds } });
+    const payments = appointmentIds.length > 0
+      ? await Payment.find({ appointmentId: { $in: appointmentIds } }).lean()
+      : [];
     const paymentMap = new Map();
     payments.forEach(payment => {
-      paymentMap.set(payment.appointmentId.toString(), payment.toObject());
+      if (payment.appointmentId) {
+        paymentMap.set(payment.appointmentId.toString(), payment);
+      }
     });
 
     // Attach patient profiles and payment info to appointments
     // Also normalize invalid paymentStatus values
     const appointmentsWithPatientProfile = appointments.map(appointment => {
-      const patientUserId = appointment.patientId._id.toString();
-      appointment.patientProfile = patientProfileMap.get(patientUserId) || null;
+      const patientUserId = appointment.patientId && appointment.patientId._id 
+        ? appointment.patientId._id.toString() 
+        : null;
+      appointment.patientProfile = patientUserId ? patientProfileMap.get(patientUserId) || null : null;
       appointment.payment = paymentMap.get(appointment._id.toString()) || null;
       
       // Normalize invalid paymentStatus values
@@ -825,7 +852,13 @@ export const getAppointments = async (req, res) => {
       return appointment;
     });
 
-    res.json(appointmentsWithPatientProfile);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      appointments: appointmentsWithPatientProfile,
+      pagination
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -999,6 +1032,17 @@ export const updateAppointment = async (req, res) => {
 // @access  Private/Doctor
 export const completeAppointment = async (req, res) => {
   try {
+    const {
+      diagnosis,
+      prescription,
+      doctorNotes,
+      testReports,
+      followUpRequired,
+      followUpDate,
+      treatmentStatus,
+      referredTo
+    } = req.body;
+
     const appointment = await Appointment.findOne({
       _id: req.params.id,
       doctorId: req.user._id
@@ -1016,11 +1060,29 @@ export const completeAppointment = async (req, res) => {
       return res.status(400).json({ message: DOCTOR_MESSAGES.CANNOT_COMPLETE_CANCELLED_APPOINTMENT });
     }
 
+    // Update appointment fields
     appointment.status = APPOINTMENT_STATUSES.COMPLETED;
+    if (diagnosis !== undefined) appointment.diagnosis = diagnosis;
+    if (prescription !== undefined) appointment.prescription = prescription;
+    if (doctorNotes !== undefined) appointment.doctorNotes = doctorNotes;
+    if (testReports !== undefined) appointment.testReports = testReports;
+    if (followUpRequired !== undefined) appointment.followUpRequired = followUpRequired;
+    if (followUpDate !== undefined) appointment.followUpDate = followUpDate ? new Date(followUpDate) : null;
+    if (treatmentStatus !== undefined) appointment.treatmentStatus = treatmentStatus;
+    
+    // Handle referral
+    if (referredTo) {
+      appointment.referredTo = {
+        doctorId: referredTo.doctorId,
+        reason: referredTo.reason
+      };
+    }
+
     await appointment.save();
 
     const updatedAppointment = await Appointment.findById(appointment._id)
-      .populate('patientId', 'firstName lastName email phone');
+      .populate('patientId', 'firstName lastName email phone')
+      .populate('referredTo.doctorId', 'firstName lastName specialization');
 
     res.json({ 
       message: DOCTOR_MESSAGES.APPOINTMENT_MARKED_AS_COMPLETED, 
@@ -1097,58 +1159,274 @@ export const rescheduleAppointment = async (req, res) => {
 // @access  Private/Doctor
 export const getPatients = async (req, res) => {
   try {
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+
     const patientIds = await Appointment.distinct('patientId', { doctorId: req.user._id });
     
+    // Get total count
+    const total = patientIds.length;
+
     const patients = await User.find({ _id: { $in: patientIds } })
       .select('firstName lastName phone email profileImage dateOfBirth gender')
-      .sort({ firstName: 1, lastName: 1 });
+      .sort({ firstName: 1, lastName: 1 })
+      .skip(offset)
+      .limit(limit);
 
-    res.json(patients);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      patients,
+      pagination
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get patient history
+// @desc    Get patient history (all consultations with this doctor)
 // @route   GET /api/doctor/patients/:patientId/history
 // @access  Private/Doctor
 export const getPatientHistory = async (req, res) => {
   try {
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+
+    // Get total count before pagination
+    const total = await Appointment.countDocuments({
+      patientId: req.params.patientId,
+      doctorId: req.user._id
+    });
+
     const appointments = await Appointment.find({
       patientId: req.params.patientId,
       doctorId: req.user._id
     })
+      .populate('previousAppointmentId')
+      .populate('referredFrom.doctorId', 'firstName lastName specialization')
+      .populate('referredTo.doctorId', 'firstName lastName specialization')
       .sort({ appointmentDate: -1 })
+      .skip(offset)
+      .limit(limit)
       .lean();
 
-    // Get payment information for all appointments
+    // Get test reports from medical records
     const appointmentIds = appointments.map(apt => apt._id);
+    const testReports = await MedicalRecord.find({
+      appointmentId: { $in: appointmentIds },
+      documentType: { $in: ['lab_report', 'xray', 'scan'] }
+    }).lean();
+
+    const reportsMap = new Map();
+    testReports.forEach(report => {
+      const aptId = report.appointmentId?.toString();
+      if (aptId) {
+        if (!reportsMap.has(aptId)) {
+          reportsMap.set(aptId, []);
+        }
+        reportsMap.get(aptId).push(report);
+      }
+    });
+
+    // Get payment information for all appointments
     const payments = await Payment.find({ appointmentId: { $in: appointmentIds } }).lean();
     const paymentMap = new Map();
     payments.forEach(payment => {
       paymentMap.set(payment.appointmentId.toString(), payment);
     });
 
-    // Attach payment data to appointments
+    // Attach payment data and test reports to appointments
     const appointmentsWithPayment = appointments.map(appointment => {
       const appointmentObj = { ...appointment };
       const payment = paymentMap.get(appointment._id.toString());
+      const reports = reportsMap.get(appointment._id.toString()) || [];
       if (payment) {
         appointmentObj.payment = payment;
       }
+      appointmentObj.testReports = reports;
       return appointmentObj;
     });
 
-    const patient = await Patient.findOne({ userId: req.params.patientId });
+    const patient = await Patient.findOne({ userId: req.params.patientId }).lean();
     const user = await User.findById(req.params.patientId)
-      .select('firstName lastName phone email profileImage dateOfBirth gender address');
+      .select('firstName lastName phone email profileImage dateOfBirth gender address')
+      .lean();
+
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    // Log history access
+    await createAuditLog({
+      user: req.user,
+      action: 'view_patient_history',
+      entityType: 'patient',
+      entityId: req.params.patientId,
+      method: 'GET',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: { patientId: req.params.patientId, total: appointments.length },
+      req
+    });
 
     res.json({
       patient: {
-        ...user?.toObject(),
-        ...patient?.toObject()
+        ...user,
+        ...patient
       },
-      appointments: appointmentsWithPayment
+      appointments: appointmentsWithPayment,
+      pagination
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get complete patient history (all doctors, read-only for new doctor)
+// @route   GET /api/doctor/patients/:patientId/complete-history
+// @access  Private/Doctor
+export const getCompletePatientHistory = async (req, res) => {
+  try {
+    const { limit, offset } = getPaginationParams(req);
+
+    // Get all appointments for this patient
+    const total = await Appointment.countDocuments({
+      patientId: req.params.patientId,
+      status: APPOINTMENT_STATUSES.COMPLETED
+    });
+
+    const appointments = await Appointment.find({
+      patientId: req.params.patientId,
+      status: APPOINTMENT_STATUSES.COMPLETED
+    })
+      .populate('doctorId', 'firstName lastName specialization profileImage')
+      .populate('previousAppointmentId')
+      .populate('referredFrom.doctorId', 'firstName lastName specialization')
+      .populate('referredTo.doctorId', 'firstName lastName specialization')
+      .sort({ appointmentDate: -1 })
+      .skip(offset)
+      .limit(limit)
+      .lean();
+
+    // Get test reports
+    const appointmentIds = appointments.map(apt => apt._id);
+    const testReports = await MedicalRecord.find({
+      appointmentId: { $in: appointmentIds },
+      documentType: { $in: ['lab_report', 'xray', 'scan'] }
+    }).lean();
+
+    const reportsMap = new Map();
+    testReports.forEach(report => {
+      const aptId = report.appointmentId?.toString();
+      if (aptId) {
+        if (!reportsMap.has(aptId)) {
+          reportsMap.set(aptId, []);
+        }
+        reportsMap.get(aptId).push(report);
+      }
+    });
+
+    // Attach test reports
+    const appointmentsWithReports = appointments.map(appointment => {
+      const reports = reportsMap.get(appointment._id.toString()) || [];
+      return {
+        ...appointment,
+        testReports: reports,
+        isReadOnly: appointment.doctorId._id.toString() !== req.user._id.toString()
+      };
+    });
+
+    // Get patient profile
+    const patient = await Patient.findOne({ userId: req.params.patientId }).lean();
+    const user = await User.findById(req.params.patientId)
+      .select('firstName lastName phone email profileImage dateOfBirth gender address')
+      .lean();
+
+    // Log history access
+    await createAuditLog({
+      user: req.user,
+      action: 'view_complete_patient_history',
+      entityType: 'patient',
+      entityId: req.params.patientId,
+      method: 'GET',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: { patientId: req.params.patientId, total: appointments.length },
+      req
+    });
+
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      patient: {
+        ...user,
+        ...patient
+      },
+      consultations: appointmentsWithReports,
+      pagination
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Refer patient to another doctor
+// @route   POST /api/doctor/appointments/:id/refer
+// @access  Private/Doctor
+export const referPatient = async (req, res) => {
+  try {
+    const { doctorId, reason } = req.body;
+
+    if (!doctorId || !reason) {
+      return res.status(400).json({ message: 'Doctor ID and reason are required' });
+    }
+
+    const appointment = await Appointment.findOne({
+      _id: req.params.id,
+      doctorId: req.user._id
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ message: APPOINTMENT_MESSAGES.APPOINTMENT_NOT_FOUND });
+    }
+
+    // Verify referred doctor exists
+    const referredDoctor = await Doctor.findOne({ userId: doctorId, isApproved: true });
+    if (!referredDoctor) {
+      return res.status(404).json({ message: 'Referred doctor not found or not approved' });
+    }
+
+    // Update appointment with referral
+    appointment.referredTo = {
+      doctorId: doctorId,
+      reason: reason
+    };
+
+    await appointment.save();
+
+    // Log referral
+    await createAuditLog({
+      user: req.user,
+      action: 'refer_patient',
+      entityType: 'appointment',
+      entityId: appointment._id,
+      method: 'POST',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: { patientId: appointment.patientId, referredTo: doctorId, reason },
+      req
+    });
+
+    const updatedAppointment = await Appointment.findById(appointment._id)
+      .populate('referredTo.doctorId', 'firstName lastName specialization')
+      .populate('patientId', 'firstName lastName');
+
+    res.json({
+      message: 'Patient referred successfully',
+      appointment: updatedAppointment
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

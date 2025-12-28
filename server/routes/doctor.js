@@ -24,7 +24,9 @@ import {
   rescheduleAppointment,
   // Patients
   getPatients,
-  getPatientHistory
+  getPatientHistory,
+  getCompletePatientHistory,
+  referPatient
 } from '../controllers/doctorController.js';
 import {
   getMessages,
@@ -73,6 +75,8 @@ router.put(DOCTOR_ROUTES.APPOINTMENT_RESCHEDULE, rescheduleAppointment);
 // Patient Routes
 router.get(DOCTOR_ROUTES.PATIENTS, getPatients);
 router.get(DOCTOR_ROUTES.PATIENT_HISTORY, getPatientHistory);
+router.get('/patients/:patientId/complete-history', getCompletePatientHistory);
+router.post('/appointments/:id/refer', referPatient);
 
 // Message Routes
 router.get(DOCTOR_ROUTES.MESSAGES, getMessages);

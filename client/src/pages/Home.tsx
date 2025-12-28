@@ -1,31 +1,48 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/common/Navbar';
 import { Footer } from '../components/common/Footer';
 import { Calendar, Users, Award, Heart, ArrowRight, CheckCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { doctorService } from '../services/api';
 import FavoriteButton from '../components/common/FavoriteButton';
+import { useAuth } from '../context/AuthContext';
+import { getDashboardPath } from '../constants';
 
 export default function Home() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [featuredDoctors, setFeaturedDoctors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Redirect logged-in users to their dashboard
   useEffect(() => {
-    const fetchFeaturedDoctors = async () => {
-      try {
-        const response = await doctorService.getFeatured();
-        // Ensure response.data is an array
-        const doctors = Array.isArray(response.data) ? response.data : [];
-        setFeaturedDoctors(doctors);
-      } catch (error) {
-        console.error('Error fetching featured doctors:', error);
-        setFeaturedDoctors([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFeaturedDoctors();
-  }, []);
+    if (user) {
+      const dashboardRoute = getDashboardPath(user.role);
+      navigate(dashboardRoute, { replace: true });
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
+    // Only fetch featured doctors if user is not logged in
+    if (!user) {
+      const fetchFeaturedDoctors = async () => {
+        try {
+          const response = await doctorService.getFeatured();
+          // Ensure response.data is an array
+          const doctors = Array.isArray(response.data) ? response.data : [];
+          setFeaturedDoctors(doctors);
+        } catch (error) {
+          console.error('Error fetching featured doctors:', error);
+          setFeaturedDoctors([]);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchFeaturedDoctors();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
 
   return (
     <div className="min-h-screen">

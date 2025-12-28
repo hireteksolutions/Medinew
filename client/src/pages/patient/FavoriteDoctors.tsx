@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { patientService } from '../../services/api';
 import { Star, Heart } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { TOAST_MESSAGES } from '../../constants';
 
 export default function FavoriteDoctors() {
   const [doctors, setDoctors] = useState<any[]>([]);
@@ -15,9 +16,12 @@ export default function FavoriteDoctors() {
   const fetchFavoriteDoctors = async () => {
     try {
       const response = await patientService.getFavoriteDoctors();
-      setDoctors(response.data);
+      // Backend returns { doctors, pagination }, so we need to extract the doctors array
+      const doctorsData = response.data?.doctors || response.data || [];
+      setDoctors(Array.isArray(doctorsData) ? doctorsData : []);
     } catch (error) {
       console.error('Error fetching favorite doctors:', error);
+      setDoctors([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -49,7 +53,7 @@ export default function FavoriteDoctors() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {doctors.map((doctor) => (
+          {Array.isArray(doctors) && doctors.map((doctor) => (
             <div key={doctor._id} className="card">
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-4 flex-1">

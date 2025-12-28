@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import Doctor from '../models/Doctor.js';
 import { USER_ROLES, MESSAGE_STATUSES, MESSAGE_PRIORITIES } from '../constants/index.js';
 import { MESSAGE_MESSAGES, AUTHZ_MESSAGES } from '../constants/messages.js';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination.js';
 
 // ============================================
 // PATIENT MESSAGE FUNCTIONS
@@ -68,8 +69,10 @@ export const createMessage = async (req, res) => {
 // @access  Private/Patient
 export const getPatientMessages = async (req, res) => {
   try {
-    const { status, priority, page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status, priority } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
 
     let query = { patientId: req.user._id };
 
@@ -81,22 +84,21 @@ export const getPatientMessages = async (req, res) => {
       query.priority = priority;
     }
 
+    // Get total count before pagination
+    const total = await Message.countDocuments(query);
+
     const messages = await Message.find(query)
       .populate('doctorId', 'firstName lastName specialization profileImage')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+      .skip(offset)
+      .limit(limit);
 
-    const total = await Message.countDocuments(query);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
 
     res.json({
-      data: messages,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      messages,
+      pagination
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -230,8 +232,10 @@ export const deleteMessage = async (req, res) => {
 // @access  Private/Doctor or Admin
 export const getDoctorMessages = async (req, res) => {
   try {
-    const { status, priority, specialization, page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status, priority, specialization } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
 
     let query = {};
 
@@ -260,23 +264,22 @@ export const getDoctorMessages = async (req, res) => {
       query.specialization = specialization;
     }
 
+    // Get total count before pagination
+    const total = await Message.countDocuments(query);
+
     const messages = await Message.find(query)
       .populate('patientId', 'firstName lastName email phone profileImage')
       .populate('doctorId', 'firstName lastName specialization profileImage')
       .sort({ priority: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+      .skip(offset)
+      .limit(limit);
 
-    const total = await Message.countDocuments(query);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
 
     res.json({
-      data: messages,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      messages,
+      pagination
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -340,7 +343,11 @@ export const respondToMessage = async (req, res) => {
 // @access  Private/Doctor
 export const getMessages = async (req, res) => {
   try {
-    const { status, priority, startDate, endDate, search, page = 1, limit = 20 } = req.query;
+    const { status, priority, startDate, endDate, search } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+    
     const doctorId = req.user._id;
 
     let query = { doctorId };
@@ -387,26 +394,22 @@ export const getMessages = async (req, res) => {
       ];
     }
 
-    // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // Get total count before pagination
+    const total = await Message.countDocuments(query);
 
     const messages = await Message.find(query)
       .populate('patientId', 'firstName lastName email phone profileImage')
       .populate('response.respondedBy', 'firstName lastName')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+      .skip(offset)
+      .limit(limit);
 
-    const total = await Message.countDocuments(query);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
 
     res.json({
       messages,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      pagination
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

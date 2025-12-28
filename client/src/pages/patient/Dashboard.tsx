@@ -1,7 +1,7 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Navbar } from '../../components/common/Navbar';
 import { Footer } from '../../components/common/Footer';
-import { LayoutDashboard, Calendar, FileText, Heart, User, Menu, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, Calendar, FileText, Heart, User, Menu, X, LogOut, History } from 'lucide-react';
 import { DASHBOARD_ROUTES } from '../../constants';
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -10,6 +10,7 @@ import Appointments from './Appointments';
 import MedicalRecords from './MedicalRecords';
 import Profile from './Profile';
 import FavoriteDoctors from './FavoriteDoctors';
+import ConsultationHistory from './ConsultationHistory';
 
 export default function PatientDashboard() {
   const location = useLocation();
@@ -19,6 +20,7 @@ export default function PatientDashboard() {
   const menuItems = [
     { path: DASHBOARD_ROUTES.PATIENT.OVERVIEW, icon: LayoutDashboard, label: 'Overview' },
     { path: DASHBOARD_ROUTES.PATIENT.APPOINTMENTS, icon: Calendar, label: 'Appointments' },
+    { path: DASHBOARD_ROUTES.PATIENT.CONSULTATION_HISTORY, icon: History, label: 'Consultation History' },
     { path: DASHBOARD_ROUTES.PATIENT.MEDICAL_RECORDS, icon: FileText, label: 'Medical Records' },
     { path: DASHBOARD_ROUTES.PATIENT.FAVORITE_DOCTORS, icon: Heart, label: 'Favorite Doctors' },
     { path: DASHBOARD_ROUTES.PATIENT.PROFILE, icon: User, label: 'Profile' },
@@ -127,6 +129,7 @@ export default function PatientDashboard() {
             <Routes>
               <Route path="/" element={<Overview />} />
               <Route path="/appointments" element={<Appointments />} />
+              <Route path="/consultation-history" element={<ConsultationHistory />} />
               <Route path="/medical-records" element={<MedicalRecords />} />
               <Route path="/favorite-doctors" element={<FavoriteDoctors />} />
               <Route path="/profile" element={<Profile />} />

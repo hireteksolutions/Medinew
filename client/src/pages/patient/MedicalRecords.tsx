@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { FileText, Download, Upload, X, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DOCUMENT_TYPES } from '../../constants';
+import Pagination from '../../components/common/Pagination';
 
 export default function MedicalRecords() {
   const [records, setRecords] = useState<any[]>([]);
@@ -12,6 +13,17 @@ export default function MedicalRecords() {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const { showLoader, hideLoader } = useLoader();
+
+  // Pagination state
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(10);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    limit: 10,
+    offset: 0,
+    page: 1,
+    pages: 0
+  });
 
   const [formData, setFormData] = useState({
     file: null as File | null,
@@ -23,14 +35,25 @@ export default function MedicalRecords() {
 
   useEffect(() => {
     fetchRecords();
-  }, []);
+  }, [offset]);
 
   const fetchRecords = async () => {
     try {
       setLoading(true);
       showLoader('Loading medical records...');
-      const response = await patientService.getMedicalRecords();
-      setRecords(Array.isArray(response.data) ? response.data : []);
+      const params: any = {
+        offset: offset,
+        limit: limit
+      };
+      const response = await patientService.getMedicalRecords(params);
+      // Handle paginated response structure: { records: [...], pagination: {...} }
+      const recordsData = response.data?.records || response.data || [];
+      setRecords(Array.isArray(recordsData) ? recordsData : []);
+      
+      // Update pagination state
+      if (response.data?.pagination) {
+        setPagination(response.data.pagination);
+      }
     } catch (error: any) {
       console.error('Error fetching records:', error);
       toast.error(error.response?.data?.message || 'Failed to load medical records');
@@ -114,6 +137,11 @@ export default function MedicalRecords() {
     } finally {
       hideLoader();
     }
+  };
+
+  const handlePageChange = (newOffset: number) => {
+    setOffset(newOffset);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -280,6 +308,18 @@ export default function MedicalRecords() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      
+      {/* Pagination */}
+      {!loading && records.length > 0 && pagination.total > 0 && (
+        <div className="mt-6">
+          <Pagination
+            total={pagination.total}
+            limit={pagination.limit || limit}
+            offset={pagination.offset || offset}
+            onPageChange={handlePageChange}
+          />
         </div>
       )}
     </div>

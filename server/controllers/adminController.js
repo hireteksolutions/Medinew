@@ -4,8 +4,10 @@ import Patient from '../models/Patient.js';
 import Appointment from '../models/Appointment.js';
 import Review from '../models/Review.js';
 import Payment from '../models/Payment.js';
-import { USER_ROLES, APPOINTMENT_STATUSES, PAYMENT_STATUSES, DATE_CONSTANTS } from '../constants/index.js';
-import { DOCTOR_MESSAGES, ADMIN_MESSAGES, AUTHZ_MESSAGES, PATIENT_MESSAGES, APPOINTMENT_MESSAGES } from '../constants/messages.js';
+import Admin from '../models/Admin.js';
+import { USER_ROLES, APPOINTMENT_STATUSES, PAYMENT_STATUSES, DATE_CONSTANTS, HTTP_STATUS } from '../constants/index.js';
+import { DOCTOR_MESSAGES, ADMIN_MESSAGES, AUTHZ_MESSAGES, PATIENT_MESSAGES, APPOINTMENT_MESSAGES, AUTH_MESSAGES } from '../constants/messages.js';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination.js';
 
 // Helper function to get date ranges
 const getDateRanges = () => {
@@ -33,10 +35,28 @@ export const getStats = async (req, res) => {
   try {
     const { todayStart, todayEnd, weekStart, monthStart } = getDateRanges();
     
-    // Basic counts
-    const totalPatients = await User.countDocuments({ role: USER_ROLES.PATIENT });
-    const totalDoctors = await User.countDocuments({ role: USER_ROLES.DOCTOR });
-    const activeUsers = await User.countDocuments({ isActive: true });
+    // Basic counts (exclude soft-deleted users)
+    const totalPatients = await User.countDocuments({ 
+      role: USER_ROLES.PATIENT,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    });
+    const totalDoctors = await User.countDocuments({ 
+      role: USER_ROLES.DOCTOR,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    });
+    const activeUsers = await User.countDocuments({ 
+      isActive: true,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    });
     
     // Appointments by period
     const totalAppointments = await Appointment.countDocuments();
@@ -217,6 +237,10 @@ export const getStats = async (req, res) => {
 export const getDoctors = async (req, res) => {
   try {
     const { approved, search } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+    
     let query = { 
       $or: [
         { isDeleted: { $exists: false } }, // Include doctors without isDeleted field (existing records)
@@ -228,24 +252,49 @@ export const getDoctors = async (req, res) => {
       query.isApproved = approved === 'true';
     }
 
-    const doctors = await Doctor.find(query)
-      .populate('userId', 'firstName lastName email phone profileImage isActive')
-      .sort({ createdAt: -1 });
-
-    let filteredDoctors = doctors;
+    // Build search query for MongoDB if possible
     if (search) {
+      const doctorsWithUsers = await Doctor.find(query)
+        .populate('userId', 'firstName lastName email phone profileImage isActive')
+        .lean();
+      
       const searchLower = search.toLowerCase();
-      filteredDoctors = doctors.filter(doc => {
+      const filteredDoctors = doctorsWithUsers.filter(doc => {
         const user = doc.userId;
         return (
-          user.firstName.toLowerCase().includes(searchLower) ||
-          user.lastName.toLowerCase().includes(searchLower) ||
-          doc.specialization.toLowerCase().includes(searchLower)
+          user?.firstName?.toLowerCase().includes(searchLower) ||
+          user?.lastName?.toLowerCase().includes(searchLower) ||
+          doc.specialization?.toLowerCase().includes(searchLower)
         );
+      });
+
+      const total = filteredDoctors.length;
+      const paginatedDoctors = filteredDoctors.slice(offset, offset + limit);
+      const pagination = buildPaginationMeta(total, limit, offset);
+
+      return res.json({
+        doctors: paginatedDoctors,
+        pagination
       });
     }
 
-    res.json(filteredDoctors);
+    // Get total count before pagination
+    const total = await Doctor.countDocuments(query);
+
+    const doctors = await Doctor.find(query)
+      .populate('userId', 'firstName lastName email phone profileImage isActive')
+      .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(limit)
+      .lean();
+
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      doctors,
+      pagination
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -276,6 +325,10 @@ export const approveDoctor = async (req, res) => {
 export const getPatients = async (req, res) => {
   try {
     const { search, status, dateFrom, dateTo } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+    
     let userQuery = {};
     
     // Filter by status (active/inactive)
@@ -283,13 +336,22 @@ export const getPatients = async (req, res) => {
       userQuery.isActive = status === 'active';
     }
 
-    const patients = await Patient.find()
+    // Exclude soft-deleted patients
+    let patientQuery = {
+      $or: [
+        { isDeleted: { $exists: false } }, // Include patients without isDeleted field (existing records)
+        { isDeleted: false } // Include patients that are not deleted
+      ]
+    };
+
+    const patients = await Patient.find(patientQuery)
       .populate({
         path: 'userId',
-        match: Object.keys(userQuery).length > 0 ? userQuery : undefined,
+        match: Object.keys(userQuery).length > 0 ? { ...userQuery, isDeleted: { $ne: true } } : { isDeleted: { $ne: true } },
         select: 'firstName lastName email phone profileImage isActive createdAt'
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     // Filter out patients where user doesn't match query
     let filteredPatients = patients.filter(pat => pat.userId !== null);
@@ -312,26 +374,38 @@ export const getPatients = async (req, res) => {
       filteredPatients = filteredPatients.filter(pat => {
         const user = pat.userId;
         return (
-          user.firstName.toLowerCase().includes(searchLower) ||
-          user.lastName.toLowerCase().includes(searchLower) ||
-          user.email.toLowerCase().includes(searchLower) ||
-          user.phone?.toLowerCase().includes(searchLower)
+          user?.firstName?.toLowerCase().includes(searchLower) ||
+          user?.lastName?.toLowerCase().includes(searchLower) ||
+          user?.email?.toLowerCase().includes(searchLower) ||
+          user?.phone?.toLowerCase().includes(searchLower)
         );
       });
     }
 
-    // Get additional stats for each patient
+    // Get total count (before pagination and stats)
+    const total = filteredPatients.length;
+
+    // Apply pagination to filtered results
+    const paginatedPatients = filteredPatients.slice(offset, offset + limit);
+
+    // Get additional stats for paginated patients only (for performance)
     const patientsWithStats = await Promise.all(
-      filteredPatients.map(async (patient) => {
+      paginatedPatients.map(async (patient) => {
         const totalAppointments = await Appointment.countDocuments({ patientId: patient.userId._id });
         return {
-          ...patient.toObject(),
+          ...patient,
           totalAppointments
         };
       })
     );
 
-    res.json(patientsWithStats);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      patients: patientsWithStats,
+      pagination
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -343,6 +417,10 @@ export const getPatients = async (req, res) => {
 export const getAppointments = async (req, res) => {
   try {
     const { status, date, doctorId, patientId, search, dateFrom, dateTo } = req.query;
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+    
     let query = {};
 
     if (status) query.status = status;
@@ -365,28 +443,204 @@ export const getAppointments = async (req, res) => {
       query.appointmentDate = { $gte: startDate, $lte: endDate };
     }
 
-    let appointments = await Appointment.find(query)
-      .populate('patientId', 'firstName lastName email phone')
-      .populate('doctorId', 'firstName lastName specialization')
-      .sort({ appointmentDate: -1 });
-
-    // Search filter (searches in patient/doctor names)
+    // Handle search with populated data
     if (search) {
+      // For search, we need to load all and filter in memory using aggregation
+      let appointments = await Appointment.aggregate([
+        { $match: query },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'patientId',
+            foreignField: '_id',
+            as: 'patientId'
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'doctorId',
+            foreignField: '_id',
+            as: 'doctorUser'
+          }
+        },
+        {
+          $lookup: {
+            from: 'doctors',
+            localField: 'doctorId',
+            foreignField: 'userId',
+            as: 'doctorInfo'
+          }
+        },
+        {
+          $unwind: {
+            path: '$patientId',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $unwind: {
+            path: '$doctorUser',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $unwind: {
+            path: '$doctorInfo',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            appointmentNumber: 1,
+            appointmentDate: 1,
+            timeSlot: 1,
+            status: 1,
+            paymentStatus: 1,
+            consultationFee: 1,
+            reasonForVisit: 1,
+            symptoms: 1,
+            createdAt: 1,
+            patientId: {
+              _id: '$patientId._id',
+              firstName: '$patientId.firstName',
+              lastName: '$patientId.lastName',
+              email: '$patientId.email',
+              phone: '$patientId.phone',
+              profileImage: '$patientId.profileImage'
+            },
+            doctorId: {
+              _id: '$doctorUser._id',
+              firstName: '$doctorUser.firstName',
+              lastName: '$doctorUser.lastName',
+              email: '$doctorUser.email',
+              phone: '$doctorUser.phone',
+              profileImage: '$doctorUser.profileImage',
+              specialization: '$doctorInfo.specialization'
+            }
+          }
+        },
+        { $sort: { appointmentDate: -1 } }
+      ]);
+
       const searchLower = search.toLowerCase();
-      appointments = appointments.filter(apt => {
+      const filteredAppointments = appointments.filter(apt => {
         const patient = apt.patientId;
         const doctor = apt.doctorId;
         return (
-          patient.firstName.toLowerCase().includes(searchLower) ||
-          patient.lastName.toLowerCase().includes(searchLower) ||
-          doctor.firstName.toLowerCase().includes(searchLower) ||
-          doctor.lastName.toLowerCase().includes(searchLower) ||
+          patient?.firstName?.toLowerCase().includes(searchLower) ||
+          patient?.lastName?.toLowerCase().includes(searchLower) ||
+          doctor?.firstName?.toLowerCase().includes(searchLower) ||
+          doctor?.lastName?.toLowerCase().includes(searchLower) ||
+          doctor?.specialization?.toLowerCase().includes(searchLower) ||
           apt.appointmentNumber?.toLowerCase().includes(searchLower)
         );
       });
+
+      const total = filteredAppointments.length;
+      const paginatedAppointments = filteredAppointments.slice(offset, offset + limit);
+      const pagination = buildPaginationMeta(total, limit, offset);
+
+      return res.json({
+        appointments: paginatedAppointments,
+        pagination
+      });
     }
 
-    res.json(appointments);
+    // Get total count before pagination
+    const total = await Appointment.countDocuments(query);
+
+    // Use aggregation to join with Doctor model to get specialization
+    const appointments = await Appointment.aggregate([
+      { $match: query },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'patientId',
+          foreignField: '_id',
+          as: 'patientId'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'doctorId',
+          foreignField: '_id',
+          as: 'doctorUser'
+        }
+      },
+      {
+        $lookup: {
+          from: 'doctors',
+          localField: 'doctorId',
+          foreignField: 'userId',
+          as: 'doctorInfo'
+        }
+      },
+      {
+        $unwind: {
+          path: '$patientId',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $unwind: {
+          path: '$doctorUser',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $unwind: {
+          path: '$doctorInfo',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          appointmentNumber: 1,
+          appointmentDate: 1,
+          timeSlot: 1,
+          status: 1,
+          paymentStatus: 1,
+          consultationFee: 1,
+          reasonForVisit: 1,
+          symptoms: 1,
+          createdAt: 1,
+          patientId: {
+            _id: '$patientId._id',
+            firstName: '$patientId.firstName',
+            lastName: '$patientId.lastName',
+            email: '$patientId.email',
+            phone: '$patientId.phone',
+            profileImage: '$patientId.profileImage'
+          },
+          doctorId: {
+            _id: '$doctorUser._id',
+            firstName: '$doctorUser.firstName',
+            lastName: '$doctorUser.lastName',
+            email: '$doctorUser.email',
+            phone: '$doctorUser.phone',
+            profileImage: '$doctorUser.profileImage',
+            specialization: '$doctorInfo.specialization',
+            education: '$doctorInfo.education',
+            languages: '$doctorInfo.languages'
+          }
+        }
+      },
+      { $sort: { appointmentDate: -1 } },
+      { $skip: offset },
+      { $limit: limit }
+    ]);
+
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      appointments,
+      pagination
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -398,23 +652,57 @@ export const getAppointments = async (req, res) => {
 export const getAllUsers = async (req, res) => {
   try {
     const { role, search } = req.query;
-    let query = {};
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+    
+    let query = { 
+      role: role || { $exists: true },
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    };
 
     if (role) query.role = role;
 
-    const users = await User.find(query).select('-password').sort({ createdAt: -1 });
-
-    let filteredUsers = users;
+    // Handle search filter
     if (search) {
+      const users = await User.find(query).select('-password').sort({ createdAt: -1 }).lean();
       const searchLower = search.toLowerCase();
-      filteredUsers = users.filter(user =>
-        user.firstName.toLowerCase().includes(searchLower) ||
-        user.lastName.toLowerCase().includes(searchLower) ||
-        user.email.toLowerCase().includes(searchLower)
+      const filteredUsers = users.filter(user =>
+        user.firstName?.toLowerCase().includes(searchLower) ||
+        user.lastName?.toLowerCase().includes(searchLower) ||
+        user.email?.toLowerCase().includes(searchLower)
       );
+
+      const total = filteredUsers.length;
+      const paginatedUsers = filteredUsers.slice(offset, offset + limit);
+      const pagination = buildPaginationMeta(total, limit, offset);
+
+      return res.json({
+        users: paginatedUsers,
+        pagination
+      });
     }
 
-    res.json(filteredUsers);
+    // Get total count before pagination
+    const total = await User.countDocuments(query);
+
+    const users = await User.find(query)
+      .select('-password')
+      .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(limit)
+      .lean();
+
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      users,
+      pagination
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -425,21 +713,79 @@ export const getAllUsers = async (req, res) => {
 // @access  Private/Admin
 export const getPatientById = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id)
-      .populate('userId', 'firstName lastName email phone profileImage dateOfBirth gender address isActive createdAt')
-      .populate('favoriteDoctors');
+    const patient = await Patient.findOne({
+      _id: req.params.id,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    })
+      .populate('userId', 'firstName lastName email phone profileImage dateOfBirth gender address isActive isVerified createdAt updatedAt')
+      .populate('favoriteDoctors', 'firstName lastName specialization');
     
     if (!patient) {
       return res.status(404).json({ message: PATIENT_MESSAGES.PATIENT_PROFILE_NOT_FOUND });
     }
 
-    // Get patient's appointment history
-    const appointments = await Appointment.find({ patientId: patient.userId._id })
-      .populate('doctorId', 'firstName lastName specialization')
-      .sort({ appointmentDate: -1 })
-      .limit(10);
+    // Get comprehensive patient statistics
+    const totalAppointments = await Appointment.countDocuments({ patientId: patient.userId._id });
+    const completedAppointments = await Appointment.countDocuments({ 
+      patientId: patient.userId._id,
+      status: APPOINTMENT_STATUSES.COMPLETED
+    });
+    const upcomingAppointments = await Appointment.countDocuments({
+      patientId: patient.userId._id,
+      status: { $in: [APPOINTMENT_STATUSES.PENDING, APPOINTMENT_STATUSES.CONFIRMED] },
+      appointmentDate: { $gte: new Date() }
+    });
 
-    res.json({ patient, recentAppointments: appointments });
+    // Get patient's appointment history with payment information
+    const MedicalRecord = (await import('../models/MedicalRecord.js')).default;
+    const Payment = (await import('../models/Payment.js')).default;
+    
+    const appointments = await Appointment.find({ patientId: patient.userId._id })
+      .populate('doctorId', 'firstName lastName specialization profileImage')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Get payment information for all appointments
+    const appointmentIds = appointments.map(apt => apt._id);
+    const payments = await Payment.find({ appointmentId: { $in: appointmentIds } });
+    const paymentMap = new Map();
+    payments.forEach(payment => {
+      paymentMap.set(payment.appointmentId.toString(), payment.toObject());
+    });
+
+    // Attach payment info to appointments
+    const appointmentsWithPayment = appointments.map(appointment => ({
+      ...appointment,
+      payment: paymentMap.get(appointment._id.toString()) || null
+    }));
+
+    // Get medical records count
+    const medicalRecordsCount = await MedicalRecord.countDocuments({ patientId: patient.userId._id });
+
+    // Calculate total amount paid
+    const totalPaid = payments
+      .filter(payment => {
+        if (payment.status === PAYMENT_STATUSES.COMPLETED) return true;
+        if (payment.paymentGateway === 'offline' && payment.status !== 'failed' && payment.status !== 'cancelled' && payment.status !== 'refunded') return true;
+        if (payment.paymentGateway === 'online' && payment.status !== 'failed' && payment.status !== 'cancelled' && payment.status !== 'refunded') return true;
+        return false;
+      })
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+
+    res.json({ 
+      patient,
+      statistics: {
+        totalAppointments,
+        completedAppointments,
+        upcomingAppointments,
+        medicalRecordsCount,
+        totalPaid
+      },
+      appointments: appointmentsWithPayment
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -450,7 +796,13 @@ export const getPatientById = async (req, res) => {
 // @access  Private/Admin
 export const updatePatient = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).populate('userId');
+    const patient = await Patient.findOne({
+      _id: req.params.id,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    }).populate('userId');
     if (!patient) {
       return res.status(404).json({ message: PATIENT_MESSAGES.PATIENT_PROFILE_NOT_FOUND });
     }
@@ -489,7 +841,13 @@ export const updatePatient = async (req, res) => {
 // @access  Private/Admin
 export const suspendPatient = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).populate('userId');
+    const patient = await Patient.findOne({
+      _id: req.params.id,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    }).populate('userId');
     if (!patient) {
       return res.status(404).json({ message: PATIENT_MESSAGES.PATIENT_PROFILE_NOT_FOUND });
     }
@@ -508,7 +866,13 @@ export const suspendPatient = async (req, res) => {
 // @access  Private/Admin
 export const activatePatient = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).populate('userId');
+    const patient = await Patient.findOne({
+      _id: req.params.id,
+      $or: [
+        { isDeleted: { $exists: false } },
+        { isDeleted: false }
+      ]
+    }).populate('userId');
     if (!patient) {
       return res.status(404).json({ message: PATIENT_MESSAGES.PATIENT_PROFILE_NOT_FOUND });
     }
@@ -528,14 +892,23 @@ export const activatePatient = async (req, res) => {
 export const deletePatient = async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.id);
-    if (!patient) {
+    if (!patient || (patient.isDeleted === true)) {
       return res.status(404).json({ message: PATIENT_MESSAGES.PATIENT_PROFILE_NOT_FOUND });
     }
 
-    // Delete associated user
-    await User.findByIdAndDelete(patient.userId);
-    // Delete patient profile
-    await Patient.findByIdAndDelete(req.params.id);
+    // Soft delete patient profile
+    patient.isDeleted = true;
+    patient.deletedAt = new Date();
+    await patient.save();
+
+    // Soft delete associated user
+    const user = await User.findById(patient.userId);
+    if (user) {
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      user.isActive = false; // Also deactivate the account
+      await user.save();
+    }
 
     res.json({ message: ADMIN_MESSAGES.PATIENT_DELETED_SUCCESSFULLY });
   } catch (error) {
@@ -732,6 +1105,262 @@ export const cancelAppointment = async (req, res) => {
     res.json({ message: ADMIN_MESSAGES.APPOINTMENT_CANCELLED_SUCCESSFULLY, appointment });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// ============================================
+// ADMIN MANAGEMENT (TWO-LEVEL APPROVAL)
+// ============================================
+
+// @desc    Create new admin account (only existing approved admins can create)
+// @route   POST /api/admin/admins
+// @access  Private/Admin
+export const createAdmin = async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, phone, dateOfBirth, gender, address } = req.body;
+
+    if (!email || !password || !firstName || !lastName || !phone) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        message: 'Email, password, firstName, lastName, and phone are required' 
+      });
+    }
+
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: AUTH_MESSAGES.EMAIL_ALREADY_REGISTERED });
+    }
+
+    const phoneExists = await User.findOne({ phone });
+    if (phoneExists) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: AUTH_MESSAGES.PHONE_ALREADY_REGISTERED });
+    }
+
+    const createdUser = await User.create({
+      email,
+      password,
+      firstName,
+      lastName,
+      phone,
+      role: USER_ROLES.ADMIN,
+      dateOfBirth,
+      gender,
+      address
+    });
+
+    const admin = await Admin.create({
+      userId: createdUser._id,
+      firstApproval: { isApproved: false },
+      secondApproval: { isApproved: false },
+      isFullyApproved: false,
+      isRejected: false
+    });
+
+    const adminWithUser = await Admin.findById(admin._id)
+      .populate('userId', 'email firstName lastName phone role');
+
+    res.status(HTTP_STATUS.CREATED).json({
+      message: 'Admin account created successfully. Approval from two administrators is required.',
+      admin: adminWithUser
+    });
+  } catch (error) {
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
+  }
+};
+
+// @desc    Get all admins (pending and approved)
+// @route   GET /api/admin/admins
+// @access  Private/Admin
+export const getAdmins = async (req, res) => {
+  try {
+    const { status } = req.query;
+    let query = {};
+
+    if (status === 'pending') {
+      query.isFullyApproved = false;
+      query.isRejected = false;
+    } else if (status === 'approved') {
+      query.isFullyApproved = true;
+    } else if (status === 'rejected') {
+      query.isRejected = true;
+    }
+
+    const admins = await Admin.find(query)
+      .populate('userId', 'email firstName lastName phone role isActive createdAt')
+      .populate('firstApproval.approvedBy', 'firstName lastName email')
+      .populate('secondApproval.approvedBy', 'firstName lastName email')
+      .populate('rejectedBy', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+
+    res.json(admins);
+  } catch (error) {
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
+  }
+};
+
+// @desc    Get admin by ID
+// @route   GET /api/admin/admins/:id
+// @access  Private/Admin
+export const getAdminById = async (req, res) => {
+  try {
+    const admin = await Admin.findOne({ userId: req.params.id })
+      .populate('userId', 'email firstName lastName phone role dateOfBirth gender address isActive createdAt')
+      .populate('firstApproval.approvedBy', 'firstName lastName email')
+      .populate('secondApproval.approvedBy', 'firstName lastName email')
+      .populate('rejectedBy', 'firstName lastName email');
+
+    if (!admin) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Admin not found' });
+    }
+
+    res.json(admin);
+  } catch (error) {
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
+  }
+};
+
+// @desc    First level approval for admin
+// @route   PUT /api/admin/admins/:id/first-approval
+// @access  Private/Admin
+export const firstApprovalAdmin = async (req, res) => {
+  try {
+    const admin = await Admin.findOne({ userId: req.params.id });
+
+    if (!admin) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Admin not found' });
+    }
+
+    if (admin.isRejected) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'Cannot approve a rejected admin account' });
+    }
+
+    if (admin.firstApproval.isApproved) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'Admin already has first approval' });
+    }
+
+    if (admin.userId.toString() === req.user._id.toString()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'You cannot approve your own admin account' });
+    }
+
+    admin.firstApproval = {
+      approvedBy: req.user._id,
+      approvedAt: new Date(),
+      isApproved: true
+    };
+
+    if (admin.firstApproval.isApproved && admin.secondApproval.isApproved) {
+      admin.isFullyApproved = true;
+    }
+
+    await admin.save();
+
+    const updatedAdmin = await Admin.findById(admin._id)
+      .populate('userId', 'email firstName lastName phone role')
+      .populate('firstApproval.approvedBy', 'firstName lastName email')
+      .populate('secondApproval.approvedBy', 'firstName lastName email');
+
+    res.json({
+      message: 'First approval granted successfully',
+      admin: updatedAdmin
+    });
+  } catch (error) {
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
+  }
+};
+
+// @desc    Second level approval for admin
+// @route   PUT /api/admin/admins/:id/second-approval
+// @access  Private/Admin
+export const secondApprovalAdmin = async (req, res) => {
+  try {
+    const admin = await Admin.findOne({ userId: req.params.id });
+
+    if (!admin) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Admin not found' });
+    }
+
+    if (admin.isRejected) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'Cannot approve a rejected admin account' });
+    }
+
+    if (!admin.firstApproval.isApproved) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'First approval is required before second approval' });
+    }
+
+    if (admin.secondApproval.isApproved) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'Admin already has second approval' });
+    }
+
+    if (admin.userId.toString() === req.user._id.toString()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'You cannot approve your own admin account' });
+    }
+
+    if (admin.firstApproval.approvedBy && admin.firstApproval.approvedBy.toString() === req.user._id.toString()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'You cannot provide both approvals. A different administrator must provide the second approval' });
+    }
+
+    admin.secondApproval = {
+      approvedBy: req.user._id,
+      approvedAt: new Date(),
+      isApproved: true
+    };
+
+    admin.isFullyApproved = true;
+
+    await admin.save();
+
+    const updatedAdmin = await Admin.findById(admin._id)
+      .populate('userId', 'email firstName lastName phone role')
+      .populate('firstApproval.approvedBy', 'firstName lastName email')
+      .populate('secondApproval.approvedBy', 'firstName lastName email');
+
+    res.json({
+      message: 'Second approval granted successfully. Admin account is now fully approved.',
+      admin: updatedAdmin
+    });
+  } catch (error) {
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
+  }
+};
+
+// @desc    Reject admin account
+// @route   PUT /api/admin/admins/:id/reject
+// @access  Private/Admin
+export const rejectAdmin = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const admin = await Admin.findOne({ userId: req.params.id });
+
+    if (!admin) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Admin not found' });
+    }
+
+    if (admin.isFullyApproved) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'Cannot reject a fully approved admin account' });
+    }
+
+    admin.isRejected = true;
+    admin.rejectedBy = req.user._id;
+    admin.rejectedAt = new Date();
+    admin.rejectionReason = reason || 'No reason provided';
+
+    const user = await User.findById(admin.userId);
+    if (user) {
+      user.isActive = false;
+      await user.save();
+    }
+
+    await admin.save();
+
+    const updatedAdmin = await Admin.findById(admin._id)
+      .populate('userId', 'email firstName lastName phone role')
+      .populate('rejectedBy', 'firstName lastName email');
+
+    res.json({
+      message: 'Admin account rejected successfully',
+      admin: updatedAdmin
+    });
+  } catch (error) {
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
   }
 };
 

@@ -147,20 +147,20 @@ export default function DoctorProfile() {
                     <div key={review._id} className="border-b pb-4 last:border-0">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center">
-                          {review.patientId.profileImage ? (
+                          {review.patientId && review.patientId.profileImage ? (
                             <img
                               src={review.patientId.profileImage}
-                              alt={review.patientId.firstName}
+                              alt={review.patientId?.firstName}
                               className="w-10 h-10 rounded-full mr-3"
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white mr-3">
-                              {review.patientId.firstName[0]}
+                              {review.patientId?.firstName?.[0]}
                             </div>
                           )}
                           <div>
                             <p className="font-semibold">
-                              {review.patientId.firstName} {review.patientId.lastName}
+                              {review.patientId?.firstName} {review.patientId?.lastName}
                             </p>
                             <div className="flex items-center">
                               {[...Array(5)].map((_, i) => (

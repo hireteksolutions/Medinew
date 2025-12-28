@@ -33,6 +33,23 @@ const appointmentSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Health information at time of booking
+  selectedDiseases: [{
+    type: String,
+    trim: true
+  }],
+  height: {
+    type: Number, // in cm
+    min: 0
+  },
+  weight: {
+    type: Number, // in kg
+    min: 0
+  },
+  bmi: {
+    type: Number,
+    min: 0
+  },
   diagnosis: {
     type: String,
     trim: true
@@ -45,6 +62,58 @@ const appointmentSchema = new mongoose.Schema({
       duration: String
     }],
     notes: String
+  },
+  doctorNotes: {
+    type: String,
+    trim: true
+  },
+  testReports: [{
+    testName: String,
+    testDate: Date,
+    fileUrl: String,
+    fileName: String,
+    results: String,
+    notes: String
+  }],
+  isFollowUp: {
+    type: Boolean,
+    default: false
+  },
+  previousAppointmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Appointment'
+  },
+  referredFrom: {
+    doctorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    appointmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Appointment'
+    },
+    reason: String
+  },
+  referredTo: {
+    doctorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reason: String
+  },
+  isEmergency: {
+    type: Boolean,
+    default: false
+  },
+  followUpRequired: {
+    type: Boolean,
+    default: false
+  },
+  followUpDate: Date,
+  treatmentStatus: {
+    type: String,
+    enum: ['ongoing', 'completed', 'dropped', 'pending'],
+    default: 'pending'
   },
   paymentStatus: {
     type: String,

@@ -11,7 +11,13 @@ import {
   deleteMedicalRecord,
   getFavoriteDoctors,
   addFavoriteDoctor,
-  removeFavoriteDoctor
+  removeFavoriteDoctor,
+  getConsultationHistory,
+  getConsultationDetails,
+  getDoctorsForSwitch,
+  getEmergencyInfo,
+  getIncompleteTreatments,
+  getDoctorRecommendations
 } from '../controllers/patientController.js';
 import { USER_ROLES } from '../constants/index.js';
 import { PATIENT_ROUTES } from '../constants/routes.js';
@@ -33,6 +39,12 @@ router.delete(PATIENT_ROUTES.MEDICAL_RECORD_BY_ID, deleteMedicalRecord);
 router.get(PATIENT_ROUTES.FAVORITE_DOCTORS, getFavoriteDoctors);
 router.post(PATIENT_ROUTES.FAVORITE_DOCTOR_BY_ID, addFavoriteDoctor);
 router.delete(PATIENT_ROUTES.FAVORITE_DOCTOR_BY_ID, removeFavoriteDoctor);
+router.get('/consultation-history', getConsultationHistory);
+router.get('/consultation-history/:id', getConsultationDetails);
+router.get('/doctors-for-switch', getDoctorsForSwitch);
+router.get('/emergency-info', getEmergencyInfo);
+router.get('/incomplete-treatments', getIncompleteTreatments);
+router.get('/doctor-recommendations', getDoctorRecommendations);
 
 export default router;
 

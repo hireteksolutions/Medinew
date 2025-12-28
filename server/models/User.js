@@ -26,6 +26,11 @@ const userSchema = new mongoose.Schema({
     required: true,
     default: DEFAULT_USER_ROLE
   },
+  customRoleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Role',
+    default: null
+  },
   firstName: {
     type: String,
     required: [true, VALIDATION_MESSAGES.PROVIDE_FIRST_NAME],
@@ -66,6 +71,14 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
   resetPasswordToken: String,
   resetPasswordExpire: Date
 }, {
@@ -92,24 +105,60 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
 };
 
 // Generate JWT access token (short-lived)
-userSchema.methods.generateToken = function() {
-  return jwt.sign({ id: this._id }, process.env.JWT_SECRET || 'fallback_secret', {
-    expiresIn: process.env.JWT_EXPIRE || '7d'
-  });
+userSchema.methods.generateToken = async function() {
+  const jwtSecret = String(process.env.JWT_SECRET || 'fallback_secret');
+  const expiresIn = String(process.env.JWT_EXPIRE || '7d');
+  
+  try {
+    const { getAccessTokenExpiration } = await import('../services/adminSettingsService.js');
+    const tokenExpiresIn = await getAccessTokenExpiration();
+    return jwt.sign({ id: String(this._id) }, jwtSecret, {
+      expiresIn: String(tokenExpiresIn || expiresIn)
+    });
+  } catch (error) {
+    // Fallback if adminSettingsService fails or AdminSettings model doesn't exist
+    return jwt.sign({ id: String(this._id) }, jwtSecret, {
+      expiresIn: expiresIn
+    });
+  }
 };
 
 // Generate JWT access token (short-lived, e.g., 15 minutes)
-userSchema.methods.generateAccessToken = function() {
-  return jwt.sign({ id: this._id }, process.env.JWT_SECRET || 'fallback_secret', {
-    expiresIn: process.env.JWT_ACCESS_EXPIRE || '15m'
-  });
+userSchema.methods.generateAccessToken = async function() {
+  const jwtSecret = String(process.env.JWT_SECRET || 'fallback_secret');
+  const defaultExpiresIn = String(process.env.JWT_ACCESS_EXPIRE || '15m');
+  
+  try {
+    const { getAccessTokenExpiration } = await import('../services/adminSettingsService.js');
+    const expiresIn = await getAccessTokenExpiration();
+    return jwt.sign({ id: String(this._id) }, jwtSecret, {
+      expiresIn: String(expiresIn || defaultExpiresIn)
+    });
+  } catch (error) {
+    // Fallback if adminSettingsService fails or AdminSettings model doesn't exist
+    return jwt.sign({ id: String(this._id) }, jwtSecret, {
+      expiresIn: defaultExpiresIn
+    });
+  }
 };
 
 // Generate refresh token (long-lived, e.g., 30 days)
-userSchema.methods.generateRefreshToken = function() {
-  return jwt.sign({ id: this._id }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'fallback_secret', {
-    expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d'
-  });
+userSchema.methods.generateRefreshToken = async function() {
+  const jwtSecret = String(process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'fallback_secret');
+  const defaultExpiresIn = String(process.env.JWT_REFRESH_EXPIRE || '30d');
+  
+  try {
+    const { getRefreshTokenExpiration } = await import('../services/adminSettingsService.js');
+    const expiresIn = await getRefreshTokenExpiration();
+    return jwt.sign({ id: String(this._id) }, jwtSecret, {
+      expiresIn: String(expiresIn || defaultExpiresIn)
+    });
+  } catch (error) {
+    // Fallback if adminSettingsService fails or AdminSettings model doesn't exist
+    return jwt.sign({ id: String(this._id) }, jwtSecret, {
+      expiresIn: defaultExpiresIn
+    });
+  }
 };
 
 export default mongoose.model('User', userSchema);

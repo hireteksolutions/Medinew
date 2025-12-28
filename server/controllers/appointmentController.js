@@ -1,8 +1,9 @@
 import Appointment from '../models/Appointment.js';
 import Doctor from '../models/Doctor.js';
 import User from '../models/User.js';
-import { USER_ROLES, APPOINTMENT_STATUSES, DEFAULT_APPOINTMENT_STATUS } from '../constants/index.js';
+import { USER_ROLES, APPOINTMENT_STATUSES, DEFAULT_APPOINTMENT_STATUS, HTTP_STATUS } from '../constants/index.js';
 import { APPOINTMENT_MESSAGES, DOCTOR_MESSAGES, AUTHZ_MESSAGES } from '../constants/messages.js';
+import { createAuditLog } from '../utils/auditLogger.js';
 
 // @desc    Get available slots for a doctor
 // @route   GET /api/appointments/available-slots/:doctorId
@@ -86,7 +87,20 @@ export const getAvailableSlots = async (req, res) => {
 // @access  Private
 export const createAppointment = async (req, res) => {
   try {
-    const { doctorId, appointmentDate, timeSlot, reasonForVisit, symptoms, paymentGateway } = req.body;
+    const { 
+      doctorId, 
+      appointmentDate, 
+      timeSlot, 
+      reasonForVisit, 
+      symptoms, 
+      paymentGateway,
+      selectedDiseases,
+      height,
+      weight,
+      bmi,
+      isFollowUp,
+      previousAppointmentId
+    } = req.body;
 
     // Validate required fields
     if (!doctorId || !appointmentDate || !timeSlot) {
@@ -124,7 +138,15 @@ export const createAppointment = async (req, res) => {
       reasonForVisit,
       symptoms,
       consultationFee: doctor.consultationFee,
-      status: DEFAULT_APPOINTMENT_STATUS
+      status: DEFAULT_APPOINTMENT_STATUS,
+      // Health information at time of booking
+      selectedDiseases: selectedDiseases || [],
+      height: height || undefined,
+      weight: weight || undefined,
+      bmi: bmi || undefined,
+      // Follow-up information
+      isFollowUp: isFollowUp || false,
+      previousAppointmentId: previousAppointmentId || undefined,
     });
 
     // Create payment record if paymentGateway is provided
@@ -148,6 +170,20 @@ export const createAppointment = async (req, res) => {
     const populatedAppointment = await Appointment.findById(appointment._id)
       .populate('doctorId', 'firstName lastName specialization profileImage')
       .populate('patientId', 'firstName lastName email phone');
+
+    // Log appointment creation
+    await createAuditLog({
+      user: req.user,
+      action: 'create_appointment',
+      entityType: 'appointment',
+      entityId: appointment._id,
+      method: 'POST',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.CREATED,
+      metadata: { doctorId, appointmentDate, timeSlot, paymentGateway, isFollowUp, previousAppointmentId },
+      req
+    });
 
     res.status(201).json({
       message: APPOINTMENT_MESSAGES.APPOINTMENT_BOOKED_SUCCESSFULLY,
@@ -214,8 +250,24 @@ export const cancelAppointment = async (req, res) => {
       return res.status(400).json({ message: APPOINTMENT_MESSAGES.CANNOT_CANCEL_COMPLETED_APPOINTMENT });
     }
 
+    const beforeStatus = appointment.status;
     appointment.status = APPOINTMENT_STATUSES.CANCELLED;
     await appointment.save();
+
+    // Log appointment cancellation
+    await createAuditLog({
+      user: req.user,
+      action: 'cancel_appointment',
+      entityType: 'appointment',
+      entityId: appointment._id,
+      method: 'PUT',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      changes: { before: { status: beforeStatus }, after: { status: appointment.status } },
+      metadata: { patientId: appointment.patientId, doctorId: appointment.doctorId },
+      req
+    });
 
     res.json({ message: APPOINTMENT_MESSAGES.APPOINTMENT_CANCELLED_SUCCESSFULLY, appointment });
   } catch (error) {

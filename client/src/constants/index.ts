@@ -167,6 +167,7 @@ export const DASHBOARD_ROUTES = {
     BASE: '/patient/dashboard',
     OVERVIEW: '/patient/dashboard',
     APPOINTMENTS: '/patient/dashboard/appointments',
+    CONSULTATION_HISTORY: '/patient/dashboard/consultation-history',
     MEDICAL_RECORDS: '/patient/dashboard/medical-records',
     FAVORITE_DOCTORS: '/patient/dashboard/favorite-doctors',
     PROFILE: '/patient/dashboard/profile',

@@ -3,6 +3,7 @@ import Appointment from '../models/Appointment.js';
 import Doctor from '../models/Doctor.js';
 import { APPOINTMENT_STATUSES, USER_ROLES } from '../constants/index.js';
 import { REVIEW_MESSAGES, AUTHZ_MESSAGES } from '../constants/messages.js';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination.js';
 
 // @desc    Create review/rating for an appointment
 // @route   POST /api/reviews
@@ -156,17 +157,19 @@ export const deleteReview = async (req, res) => {
 export const getDoctorReviews = async (req, res) => {
   try {
     const { doctorId } = req.params;
-    const { page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+
+    // Get total count before pagination
+    const total = await Review.countDocuments({ doctorId });
 
     const reviews = await Review.find({ doctorId })
       .populate('patientId', 'firstName lastName profileImage')
       .populate('appointmentId', 'appointmentDate')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await Review.countDocuments({ doctorId });
+      .skip(offset)
+      .limit(limit);
 
     // Calculate average rating
     const avgRatingResult = await Review.aggregate([
@@ -176,14 +179,12 @@ export const getDoctorReviews = async (req, res) => {
 
     const avgRating = avgRatingResult.length > 0 ? avgRatingResult[0].avgRating : 0;
 
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
     res.json({
-      data: reviews,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      },
+      reviews,
+      pagination,
       averageRating: Math.round(avgRating * 10) / 10
     });
   } catch (error) {
@@ -196,12 +197,26 @@ export const getDoctorReviews = async (req, res) => {
 // @access  Private/Patient
 export const getPatientReviews = async (req, res) => {
   try {
+    // Get pagination parameters
+    const { limit, offset } = getPaginationParams(req);
+
+    // Get total count before pagination
+    const total = await Review.countDocuments({ patientId: req.user._id });
+
     const reviews = await Review.find({ patientId: req.user._id })
       .populate('doctorId', 'firstName lastName specialization profileImage')
       .populate('appointmentId', 'appointmentDate')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(limit);
 
-    res.json({ data: reviews });
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(total, limit, offset);
+
+    res.json({
+      reviews,
+      pagination
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

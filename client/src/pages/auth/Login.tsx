@@ -10,6 +10,7 @@ import { VALIDATION_MESSAGES, VALIDATION_PATTERNS } from '../../constants/valida
 import { getDashboardPath } from '../../constants';
 import { PROJECT_CONFIG } from '../../config';
 import { LogIn, Mail, Lock, Eye, EyeOff, UserPlus } from 'lucide-react';
+import { encryptPassword } from '../../utils/encryption';
 
 const loginSchema = z.object({
   email: z
@@ -42,7 +43,9 @@ export default function Login() {
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
     try {
-      await login(data.email, data.password);
+      // Encrypt password before sending to server
+      const encryptedPassword = encryptPassword(data.password);
+      await login(data.email, encryptedPassword);
       // Get the user from localStorage (set synchronously by login function)
       // This ensures we have the role to determine redirect
       const storedUser = localStorage.getItem('user');

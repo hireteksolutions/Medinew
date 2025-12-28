@@ -10,9 +10,10 @@ import { USER_ROLES, USER_ROLE_OPTIONS, GENDERS, GENDER_OPTIONS, UserRole, DASHB
 import { VALIDATION_MESSAGES, VALIDATION_PATTERNS, VALIDATION_RULES } from '../../constants/validation';
 import { PROJECT_CONFIG } from '../../config';
 import { authService, specializationService } from '../../services/api';
-import { User, Mail, Phone, Lock, Calendar, UserCircle, CheckCircle, Eye, EyeOff, Award } from 'lucide-react';
+import { User, Mail, Phone, Lock, Calendar, UserCircle, CheckCircle, Eye, EyeOff, Award, X } from 'lucide-react';
 import DatePickerComponent from '../../components/common/DatePicker';
 import { format } from 'date-fns';
+import { encryptPassword } from '../../utils/encryption';
 
 // Create async validation functions
 const checkEmailAvailability = async (email: string): Promise<boolean> => {
@@ -84,6 +85,12 @@ const registerSchema = z.object({
     ),
   licenseNumber: z.string().optional(),
   specialization: z.string().optional(),
+  education: z.array(z.object({
+    degree: z.string().optional(),
+    institution: z.string().optional(),
+    year: z.number().optional()
+  })).optional(),
+  languages: z.array(z.string()).optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: VALIDATION_MESSAGES.PASSWORDS_DONT_MATCH,
   path: ['confirmPassword'],
@@ -166,6 +173,8 @@ export default function Register() {
       role: initialRole,
       licenseNumber: '',
       specialization: '',
+      education: [],
+      languages: [],
     },
   });
 
@@ -212,6 +221,8 @@ export default function Register() {
     setLoading(true);
     try {
       const { confirmPassword, ...registerData } = data;
+      // Encrypt password before sending to server
+      registerData.password = encryptPassword(registerData.password);
       const result = await registerUser({
         ...registerData,
         role: registerData.role as UserRole,
@@ -232,6 +243,8 @@ export default function Register() {
           gender: undefined,
           licenseNumber: '',
           specialization: '',
+          education: [],
+          languages: [],
         });
         // Redirect to login page with message
         navigate('/login');
@@ -249,9 +262,11 @@ export default function Register() {
         confirmPassword: '',
         dateOfBirth: '',
         gender: undefined,
-        licenseNumber: '',
-        specialization: '',
-      });
+          licenseNumber: '',
+          specialization: '',
+          education: [],
+          languages: [],
+        });
       
       // If accessed via admin dashboard (with role query param), redirect back to admin dashboard
       // Otherwise, redirect to login page
@@ -581,6 +596,143 @@ export default function Register() {
                     {errors.licenseNumber && (
                       <p className="mt-1 text-sm text-danger-500">{errors.licenseNumber.message}</p>
                     )}
+                  </div>
+
+                  {/* Education Section */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Education
+                    </label>
+                    <div id="education-container" className="space-y-3">
+                      {watch('education')?.map((edu: any, index: number) => (
+                        <div key={index} className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border border-gray-200 rounded-lg">
+                          <input
+                            type="text"
+                            placeholder="Degree (e.g., MBBS, MD)"
+                            value={edu?.degree || ''}
+                            onChange={(e) => {
+                              const education = watch('education') || [];
+                              education[index] = { ...education[index], degree: e.target.value };
+                              setValue('education', education);
+                            }}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Institution"
+                            value={edu?.institution || ''}
+                            onChange={(e) => {
+                              const education = watch('education') || [];
+                              education[index] = { ...education[index], institution: e.target.value };
+                              setValue('education', education);
+                            }}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              placeholder="Year"
+                              value={edu?.year || ''}
+                              onChange={(e) => {
+                                const education = watch('education') || [];
+                                education[index] = { ...education[index], year: e.target.value ? parseInt(e.target.value) : undefined };
+                                setValue('education', education);
+                              }}
+                              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const education = watch('education') || [];
+                                education.splice(index, 1);
+                                setValue('education', education);
+                              }}
+                              className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const education = watch('education') || [];
+                        setValue('education', [...education, { degree: '', institution: '', year: undefined }]);
+                      }}
+                      className="mt-2 px-4 py-2 text-sm text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors flex items-center gap-2"
+                    >
+                      <Award className="w-4 h-4" />
+                      Add Education
+                    </button>
+                  </div>
+
+                  {/* Languages Section */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Languages Spoken
+                    </label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {watch('languages')?.map((lang: string, index: number) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm"
+                        >
+                          {lang}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const languages = watch('languages') || [];
+                              languages.splice(index, 1);
+                              setValue('languages', languages);
+                            }}
+                            className="hover:text-primary-900"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        id="languageInput"
+                        placeholder="Enter language (e.g., English, Hindi)"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const input = e.target as HTMLInputElement;
+                            const language = input.value.trim();
+                            if (language) {
+                              const languages = watch('languages') || [];
+                              if (!languages.includes(language)) {
+                                setValue('languages', [...languages, language]);
+                                input.value = '';
+                              }
+                            }
+                          }
+                        }}
+                        className="flex-1 block px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const input = document.getElementById('languageInput') as HTMLInputElement;
+                          const language = input.value.trim();
+                          if (language) {
+                            const languages = watch('languages') || [];
+                            if (!languages.includes(language)) {
+                              setValue('languages', [...languages, language]);
+                              input.value = '';
+                            }
+                          }
+                        }}
+                        className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

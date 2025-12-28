@@ -5,6 +5,7 @@ import { Footer } from '../components/common/Footer';
 import { Search, Filter, Star, ArrowLeft } from 'lucide-react';
 import { doctorService, specializationService } from '../services/api';
 import FavoriteButton from '../components/common/FavoriteButton';
+import Pagination from '../components/common/Pagination';
 
 export default function Doctors() {
   const navigate = useNavigate();
@@ -16,14 +17,30 @@ export default function Doctors() {
   const [specialization, setSpecialization] = useState('');
   const [minRating, setMinRating] = useState('');
 
+  // Pagination state
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(12);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    limit: 12,
+    offset: 0,
+    page: 1,
+    pages: 0
+  });
+
   useEffect(() => {
     fetchSpecializations();
     fetchDoctors();
   }, []);
 
+  // Reset to first page when filters change
+  useEffect(() => {
+    setOffset(0);
+  }, [specialization, minRating, searchTerm]);
+
   useEffect(() => {
     fetchDoctors();
-  }, [specialization, minRating]);
+  }, [specialization, minRating, offset]);
 
   const fetchSpecializations = async () => {
     try {
@@ -41,15 +58,23 @@ export default function Doctors() {
   const fetchDoctors = async () => {
     setLoading(true);
     try {
-      const params: any = {};
+      const params: any = {
+        offset: offset,
+        limit: limit
+      };
       if (specialization) params.specialization = specialization;
       if (minRating) params.minRating = minRating;
       if (searchTerm) params.search = searchTerm;
 
       const response = await doctorService.getAll(params);
-      // Ensure response.data is an array
-      const doctorsList = Array.isArray(response.data) ? response.data : [];
-      setDoctors(doctorsList);
+      // Handle paginated response structure: { doctors: [...], pagination: {...} }
+      const doctorsData = response.data?.doctors || response.data || [];
+      setDoctors(Array.isArray(doctorsData) ? doctorsData : []);
+      
+      // Update pagination state
+      if (response.data?.pagination) {
+        setPagination(response.data.pagination);
+      }
     } catch (error) {
       console.error('Error fetching doctors:', error);
       setDoctors([]);
@@ -59,7 +84,13 @@ export default function Doctors() {
   };
 
   const handleSearch = () => {
+    setOffset(0);
     fetchDoctors();
+  };
+
+  const handlePageChange = (newOffset: number) => {
+    setOffset(newOffset);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -177,6 +208,18 @@ export default function Doctors() {
                 </Link>
               </div>
             ))}
+          </div>
+        )}
+        
+        {/* Pagination */}
+        {!loading && doctors.length > 0 && pagination.total > 0 && (
+          <div className="mt-8">
+            <Pagination
+              total={pagination.total}
+              limit={pagination.limit || limit}
+              offset={pagination.offset || offset}
+              onPageChange={handlePageChange}
+            />
           </div>
         )}
       </div>

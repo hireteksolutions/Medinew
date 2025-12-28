@@ -33,9 +33,10 @@ export default function Overview() {
       ]);
 
       // Extract data from responses (Axios wraps in .data)
-      const upcomingAppointments = Array.isArray(upcomingRes.data) ? upcomingRes.data : [];
-      const allAppointments = Array.isArray(allAppointmentsRes.data) ? allAppointmentsRes.data : [];
-      const medicalRecords = Array.isArray(recordsRes.data) ? recordsRes.data : [];
+      // Handle paginated response structure: { appointments: [...], pagination: {...} }
+      const upcomingAppointments = upcomingRes.data?.appointments || (Array.isArray(upcomingRes.data) ? upcomingRes.data : []);
+      const allAppointments = allAppointmentsRes.data?.appointments || (Array.isArray(allAppointmentsRes.data) ? allAppointmentsRes.data : []);
+      const medicalRecords = recordsRes.data?.records || (Array.isArray(recordsRes.data) ? recordsRes.data : []);
 
       console.log('Overview Data:', {
         upcoming: upcomingAppointments.length,

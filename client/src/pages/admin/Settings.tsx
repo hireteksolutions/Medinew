@@ -9,19 +9,65 @@ import {
   CheckCircle,
   FileText,
   Bell,
-  Coins
+  Coins,
+  Plus,
+  Edit,
+  Trash2,
+  X,
+  Shield
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { adminService } from '../../services/api';
+import { TOAST_MESSAGES } from '../../constants';
 
 interface SystemSettings {
-  appointmentSlotDuration: number;
-  minConsultationFee: number;
-  maxConsultationFee: number;
-  systemName: string;
-  systemEmail: string;
-  enableNotifications: boolean;
-  enableSMS: boolean;
-  enableEmail: boolean;
+  appointmentSlotDuration?: number;
+  advanceBookingDays?: number;
+  cancellationHours?: number;
+  minConsultationFee?: number;
+  maxConsultationFee?: number;
+  systemName?: string;
+  systemEmail?: string;
+  enableNotifications?: boolean;
+  enableSMS?: boolean;
+  enableEmail?: boolean;
+  timezone?: string;
+  currency?: string;
+  dateFormat?: string;
+}
+
+interface EmailTemplate {
+  _id?: string;
+  name: string;
+  subject: string;
+  body: string;
+  description?: string;
+  category?: string;
+  isActive?: boolean;
+  variables?: string[];
+}
+
+interface Specialization {
+  _id?: string;
+  name: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+interface Role {
+  _id?: string;
+  name: string;
+  displayName: string;
+  description?: string;
+  permissions: string[];
+  isActive?: boolean;
+  isSystem?: boolean;
+}
+
+interface Permission {
+  key: string;
+  value: string;
+  label: string;
 }
 
 export default function Settings() {
@@ -30,6 +76,8 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState<SystemSettings>({
     appointmentSlotDuration: 30,
+    advanceBookingDays: 30,
+    cancellationHours: 24,
     minConsultationFee: 100,
     maxConsultationFee: 5000,
     systemName: 'MediNew',
@@ -37,34 +85,121 @@ export default function Settings() {
     enableNotifications: true,
     enableSMS: false,
     enableEmail: true,
+    timezone: 'Asia/Kolkata',
+    currency: 'INR',
+    dateFormat: 'DD/MM/YYYY',
+  });
+  
+  // Email Templates state
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateForm, setTemplateForm] = useState<EmailTemplate>({
+    name: '',
+    subject: '',
+    body: '',
+    description: '',
+    category: 'system',
+    isActive: true,
+    variables: []
+  });
+  
+  // Specializations state
+  const [specializations, setSpecializations] = useState<Specialization[]>([]);
+  const [selectedSpecialization, setSelectedSpecialization] = useState<Specialization | null>(null);
+  const [showSpecializationModal, setShowSpecializationModal] = useState(false);
+  const [specializationForm, setSpecializationForm] = useState<Specialization>({
+    name: '',
+    description: '',
+    isActive: true
+  });
+  
+  // Roles state
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [roleForm, setRoleForm] = useState<Role>({
+    name: '',
+    displayName: '',
+    description: '',
+    permissions: [],
+    isActive: true,
+    isSystem: false
   });
 
   useEffect(() => {
-    // Load settings from backend or use defaults
     loadSettings();
-  }, []);
+    if (activeTab === 'email') loadEmailTemplates();
+    if (activeTab === 'specialties') loadSpecializations();
+    if (activeTab === 'roles') {
+      loadRoles();
+      loadPermissions();
+    }
+  }, [activeTab]);
 
   const loadSettings = async () => {
     try {
       setLoading(true);
-      // TODO: Fetch from backend API
-      // const response = await adminService.getSettings();
-      // setSettings(response.data);
-    } catch (error) {
+      const response = await adminService.getSettings();
+      if (response.data) {
+        setSettings(response.data);
+      }
+    } catch (error: any) {
       console.error('Error loading settings:', error);
+      toast.error(error.response?.data?.message || 'Failed to load settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadEmailTemplates = async () => {
+    try {
+      const response = await adminService.getEmailTemplates();
+      setEmailTemplates(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading email templates:', error);
+      toast.error(error.response?.data?.message || 'Failed to load email templates');
+    }
+  };
+
+  const loadSpecializations = async () => {
+    try {
+      const response = await adminService.getSpecializations();
+      setSpecializations(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading specializations:', error);
+      toast.error(error.response?.data?.message || 'Failed to load specializations');
+    }
+  };
+
+  const loadRoles = async () => {
+    try {
+      const response = await adminService.getRoles();
+      setRoles(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading roles:', error);
+      toast.error(error.response?.data?.message || 'Failed to load roles');
+    }
+  };
+
+  const loadPermissions = async () => {
+    try {
+      const response = await adminService.getPermissions();
+      setPermissions(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading permissions:', error);
+      toast.error(error.response?.data?.message || 'Failed to load permissions');
     }
   };
 
   const handleSave = async () => {
     try {
       setSaving(true);
-      // TODO: Save to backend API
-      // await adminService.updateSettings(settings);
+      await adminService.updateSettings(settings);
       toast.success(TOAST_MESSAGES.SETTINGS_SAVED_SUCCESS);
-    } catch (error) {
-      toast.error(TOAST_MESSAGES.SETTINGS_SAVE_FAILED);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.SETTINGS_SAVE_FAILED);
     } finally {
       setSaving(false);
     }
@@ -75,6 +210,127 @@ export default function Settings() {
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handleSaveEmailTemplate = async () => {
+    try {
+      if (selectedTemplate?._id) {
+        await adminService.updateEmailTemplate(selectedTemplate._id, templateForm);
+        toast.success('Email template updated successfully');
+      } else {
+        await adminService.createEmailTemplate(templateForm);
+        toast.success('Email template created successfully');
+      }
+      setShowTemplateModal(false);
+      setSelectedTemplate(null);
+      setTemplateForm({ name: '', subject: '', body: '', description: '', category: 'system', isActive: true, variables: [] });
+      loadEmailTemplates();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save email template');
+    }
+  };
+
+  const handleEditEmailTemplate = (template: EmailTemplate) => {
+    setSelectedTemplate(template);
+    setTemplateForm({ ...template });
+    setShowTemplateModal(true);
+  };
+
+  const handleDeleteEmailTemplate = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this email template?')) return;
+    try {
+      await adminService.deleteEmailTemplate(id);
+      toast.success('Email template deleted successfully');
+      loadEmailTemplates();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to delete email template');
+    }
+  };
+
+  const handleSaveSpecialization = async () => {
+    try {
+      if (selectedSpecialization?._id) {
+        await adminService.updateSpecialization(selectedSpecialization._id, specializationForm);
+        toast.success('Specialization updated successfully');
+      } else {
+        await adminService.createSpecialization(specializationForm);
+        toast.success('Specialization created successfully');
+      }
+      setShowSpecializationModal(false);
+      setSelectedSpecialization(null);
+      setSpecializationForm({ name: '', description: '', isActive: true });
+      loadSpecializations();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save specialization');
+    }
+  };
+
+  const handleEditSpecialization = (spec: Specialization) => {
+    setSelectedSpecialization(spec);
+    setSpecializationForm({ ...spec });
+    setShowSpecializationModal(true);
+  };
+
+  const handleDeleteSpecialization = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this specialization?')) return;
+    try {
+      await adminService.deleteSpecialization(id);
+      toast.success('Specialization deleted successfully');
+      loadSpecializations();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to delete specialization');
+    }
+  };
+
+  const handleSaveRole = async () => {
+    try {
+      if (!roleForm.name.trim() || !roleForm.displayName.trim()) {
+        toast.error('Name and Display Name are required');
+        return;
+      }
+      
+      if (selectedRole?._id) {
+        await adminService.updateRole(selectedRole._id, roleForm);
+        toast.success('Role updated successfully');
+      } else {
+        await adminService.createRole(roleForm);
+        toast.success('Role created successfully');
+      }
+      setShowRoleModal(false);
+      setSelectedRole(null);
+      setRoleForm({ name: '', displayName: '', description: '', permissions: [], isActive: true, isSystem: false });
+      loadRoles();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save role');
+    }
+  };
+
+  const handleEditRole = (role: Role) => {
+    setSelectedRole(role);
+    setRoleForm({ ...role });
+    setShowRoleModal(true);
+  };
+
+  const handleDeleteRole = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this role? Users assigned to this role will lose access.')) return;
+    try {
+      await adminService.deleteRole(id);
+      toast.success('Role deleted successfully');
+      loadRoles();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to delete role');
+    }
+  };
+
+  const togglePermission = (permissionValue: string) => {
+    setRoleForm((prev) => {
+      const permissions = prev.permissions || [];
+      if (permissions.includes(permissionValue)) {
+        return { ...prev, permissions: permissions.filter((p) => p !== permissionValue) };
+      } else {
+        return { ...prev, permissions: [...permissions, permissionValue] };
+      }
+    });
   };
 
   if (loading) {
@@ -92,6 +348,7 @@ export default function Settings() {
     { id: 'email', label: 'Email Templates', icon: Mail },
     { id: 'specialties', label: 'Specialties', icon: Users },
     { id: 'pricing', label: 'Pricing', icon: Coins },
+    { id: 'roles', label: 'Role Management', icon: Shield },
   ];
 
   return (
@@ -186,12 +443,43 @@ export default function Settings() {
                       min="15"
                       max="120"
                       step="15"
-                      value={settings.appointmentSlotDuration}
+                      value={settings.appointmentSlotDuration || 30}
                       onChange={(e) => handleChange('appointmentSlotDuration', parseInt(e.target.value))}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                     <p className="mt-1 text-sm text-gray-500">
                       Default duration for appointment slots (15, 30, 45, 60, etc.)
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Advance Booking Days
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={settings.advanceBookingDays || 30}
+                      onChange={(e) => handleChange('advanceBookingDays', parseInt(e.target.value))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      Maximum days in advance patients can book appointments
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cancellation Hours Before Appointment
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={settings.cancellationHours || 24}
+                      onChange={(e) => handleChange('cancellationHours', parseInt(e.target.value))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      Minimum hours before appointment when cancellation is allowed
                     </p>
                   </div>
                 </div>
@@ -258,37 +546,60 @@ export default function Settings() {
           {/* Email Templates */}
           {activeTab === 'email' && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Email Templates</h3>
-                <div className="space-y-4">
-                  <div className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">Appointment Confirmation</h4>
-                      <button className="text-primary-600 hover:text-primary-700 text-sm">Edit</button>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      Email sent when an appointment is confirmed
-                    </p>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Email Templates</h3>
+                <button
+                  onClick={() => {
+                    setSelectedTemplate(null);
+                    setTemplateForm({ name: '', subject: '', body: '', description: '', category: 'system', isActive: true, variables: [] });
+                    setShowTemplateModal(true);
+                  }}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Template
+                </button>
+              </div>
+              <div className="space-y-4">
+                {emailTemplates.length === 0 ? (
+                  <div className="text-center py-12 border border-gray-200 rounded-lg">
+                    <Mail className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No email templates found</p>
                   </div>
-                  <div className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">Appointment Reminder</h4>
-                      <button className="text-primary-600 hover:text-primary-700 text-sm">Edit</button>
+                ) : (
+                  emailTemplates.map((template) => (
+                    <div key={template._id} className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h4 className="font-medium text-gray-900">{template.name}</h4>
+                          <p className="text-sm text-gray-500">{template.description || 'No description'}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditEmailTemplate(template)}
+                            className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => template._id && handleDeleteEmailTemplate(template._id)}
+                            className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">{template.category}</span>
+                        {template.isActive ? (
+                          <span className="ml-2 text-xs px-2 py-1 bg-green-100 text-green-700 rounded">Active</span>
+                        ) : (
+                          <span className="ml-2 text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">Inactive</span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-500">
-                      Email sent 24 hours before appointment
-                    </p>
-                  </div>
-                  <div className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">Password Reset</h4>
-                      <button className="text-primary-600 hover:text-primary-700 text-sm">Edit</button>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      Email sent for password reset requests
-                    </p>
-                  </div>
-                </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -296,26 +607,71 @@ export default function Settings() {
           {/* Specialties Management */}
           {activeTab === 'specialties' && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Manage Specialties</h3>
-                <p className="text-gray-600 mb-4">
-                  Specialties are managed through the Specializations collection in the database.
-                  Use the seed script to add or update specializations.
-                </p>
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-blue-900 mb-1">Note</h4>
-                      <p className="text-sm text-blue-700">
-                        To add or update specialties, run the seed script:
-                        <code className="block mt-2 bg-blue-100 p-2 rounded">
-                          npm run seed:specializations
-                        </code>
-                      </p>
-                    </div>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Manage Specialties</h3>
+                <button
+                  onClick={() => {
+                    setSelectedSpecialization(null);
+                    setSpecializationForm({ name: '', description: '', isActive: true });
+                    setShowSpecializationModal(true);
+                  }}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Specialization
+                </button>
+              </div>
+              <div className="space-y-4">
+                {specializations.length === 0 ? (
+                  <div className="text-center py-12 border border-gray-200 rounded-lg">
+                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No specializations found</p>
                   </div>
-                </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {specializations.map((spec) => (
+                          <tr key={spec._id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{spec.name}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">{spec.description || 'N/A'}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {spec.isActive ? (
+                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                              ) : (
+                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Inactive</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleEditSpecialization(spec)}
+                                  className="text-primary-600 hover:text-primary-900"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => spec._id && handleDeleteSpecialization(spec._id)}
+                                  className="text-red-600 hover:text-red-900"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -333,7 +689,7 @@ export default function Settings() {
                     <input
                       type="number"
                       min="0"
-                      value={settings.minConsultationFee}
+                      value={settings.minConsultationFee || 100}
                       onChange={(e) => handleChange('minConsultationFee', parseInt(e.target.value))}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
@@ -345,7 +701,7 @@ export default function Settings() {
                     <input
                       type="number"
                       min="0"
-                      value={settings.maxConsultationFee}
+                      value={settings.maxConsultationFee || 5000}
                       onChange={(e) => handleChange('maxConsultationFee', parseInt(e.target.value))}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
@@ -357,6 +713,118 @@ export default function Settings() {
                     </p>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Role Management */}
+          {activeTab === 'roles' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Manage Roles & Permissions</h3>
+                <button
+                  onClick={() => {
+                    setSelectedRole(null);
+                    setRoleForm({ name: '', displayName: '', description: '', permissions: [], isActive: true, isSystem: false });
+                    setShowRoleModal(true);
+                  }}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Role
+                </button>
+              </div>
+
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gradient-to-r from-primary-500 to-primary-600">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Role Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Display Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Permissions
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-white uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {roles.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                          No roles found. Create a new role to get started.
+                        </td>
+                      </tr>
+                    ) : (
+                      roles.map((role) => (
+                        <tr key={role._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{role.name}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{role.displayName}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-500">
+                              {role.permissions?.length || 0} permission(s)
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                role.isActive
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {role.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                role.isSystem
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}
+                            >
+                              {role.isSystem ? 'System' : 'Custom'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => handleEditRole(role)}
+                                className="text-primary-600 hover:text-primary-900"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              {!role.isSystem && (
+                                <button
+                                  onClick={() => role._id && handleDeleteRole(role._id)}
+                                  className="text-red-600 hover:text-red-900"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -395,6 +863,252 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {/* Email Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-2xl font-bold">{selectedTemplate ? 'Edit' : 'Create'} Email Template</h2>
+              <button onClick={() => setShowTemplateModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                <input
+                  type="text"
+                  value={templateForm.name}
+                  onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Subject *</label>
+                <input
+                  type="text"
+                  value={templateForm.subject}
+                  onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Body *</label>
+                <textarea
+                  value={templateForm.body}
+                  onChange={(e) => setTemplateForm({ ...templateForm, body: e.target.value })}
+                  rows={10}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={templateForm.description}
+                  onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                <select
+                  value={templateForm.category}
+                  onChange={(e) => setTemplateForm({ ...templateForm, category: e.target.value as any })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="appointment">Appointment</option>
+                  <option value="auth">Authentication</option>
+                  <option value="notification">Notification</option>
+                  <option value="system">System</option>
+                </select>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={templateForm.isActive}
+                  onChange={(e) => setTemplateForm({ ...templateForm, isActive: e.target.checked })}
+                  className="mr-2"
+                />
+                <label className="text-sm font-medium text-gray-700">Active</label>
+              </div>
+              <div className="flex justify-end gap-4 pt-4">
+                <button onClick={() => setShowTemplateModal(false)} className="btn-secondary">
+                  Cancel
+                </button>
+                <button onClick={handleSaveEmailTemplate} className="btn-primary">
+                  Save Template
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Specialization Modal */}
+      {showSpecializationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full">
+            <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-2xl font-bold">{selectedSpecialization ? 'Edit' : 'Create'} Specialization</h2>
+              <button onClick={() => setShowSpecializationModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                <input
+                  type="text"
+                  value={specializationForm.name}
+                  onChange={(e) => setSpecializationForm({ ...specializationForm, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={specializationForm.description}
+                  onChange={(e) => setSpecializationForm({ ...specializationForm, description: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={specializationForm.isActive}
+                  onChange={(e) => setSpecializationForm({ ...specializationForm, isActive: e.target.checked })}
+                  className="mr-2"
+                />
+                <label className="text-sm font-medium text-gray-700">Active</label>
+              </div>
+              <div className="flex justify-end gap-4 pt-4">
+                <button onClick={() => setShowSpecializationModal(false)} className="btn-secondary">
+                  Cancel
+                </button>
+                <button onClick={handleSaveSpecialization} className="btn-primary">
+                  Save Specialization
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Role Modal */}
+      {showRoleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-2xl font-bold">{selectedRole ? 'Edit' : 'Create'} Role</h2>
+              <button onClick={() => setShowRoleModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Role Name (lowercase, no spaces) *
+                  </label>
+                  <input
+                    type="text"
+                    value={roleForm.name}
+                    onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="e.g., receptionist"
+                    required
+                    disabled={selectedRole?.isSystem}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Used internally, must be unique</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Display Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={roleForm.displayName}
+                    onChange={(e) => setRoleForm({ ...roleForm, displayName: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder="e.g., Receptionist"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Human-readable name</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={roleForm.description}
+                  onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="Describe the role's purpose and responsibilities"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Permissions *
+                </label>
+                <div className="border border-gray-300 rounded-lg p-4 max-h-96 overflow-y-auto">
+                  {permissions.length === 0 ? (
+                    <p className="text-sm text-gray-500">Loading permissions...</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {permissions.map((permission) => (
+                        <label
+                          key={permission.value}
+                          className="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={roleForm.permissions?.includes(permission.value) || false}
+                            onChange={() => togglePermission(permission.value)}
+                            className="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900">{permission.label}</div>
+                            <div className="text-xs text-gray-500">{permission.value}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {roleForm.permissions?.length || 0} permission(s) selected
+                </p>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={roleForm.isActive}
+                  onChange={(e) => setRoleForm({ ...roleForm, isActive: e.target.checked })}
+                  className="mr-2 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+                <label className="text-sm font-medium text-gray-700">Active</label>
+              </div>
+              <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
+                <button onClick={() => setShowRoleModal(false)} className="btn-secondary">
+                  Cancel
+                </button>
+                <button onClick={handleSaveRole} className="btn-primary">
+                  {selectedRole ? 'Update' : 'Create'} Role
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

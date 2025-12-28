@@ -18,7 +18,13 @@ import {
   deletePatient,
   getAppointments,
   cancelAppointment,
-  getAllUsers
+  getAllUsers,
+  createAdmin,
+  getAdmins,
+  getAdminById,
+  firstApprovalAdmin,
+  secondApprovalAdmin,
+  rejectAdmin
 } from '../controllers/adminController.js';
 import {
   getMostBookedSpecialties,
@@ -35,6 +41,30 @@ import {
   updateConfig,
   testConnection
 } from '../controllers/fileStorageConfigController.js';
+import { getSettings, updateSettings } from '../controllers/settingsController.js';
+import {
+  getEmailTemplates,
+  getEmailTemplateById,
+  createEmailTemplate,
+  updateEmailTemplate,
+  deleteEmailTemplate
+} from '../controllers/emailTemplateController.js';
+import {
+  getRoles,
+  getRoleById,
+  createRole,
+  updateRole,
+  deleteRole,
+  getPermissions,
+  assignRoleToUser
+} from '../controllers/roleController.js';
+import {
+  getSpecializations,
+  getSpecializationById,
+  createSpecialization,
+  updateSpecialization,
+  deleteSpecialization
+} from '../controllers/specializationController.js';
 import { USER_ROLES } from '../constants/index.js';
 import { ADMIN_ROUTES, buildRoute } from '../constants/routes.js';
 
@@ -72,6 +102,14 @@ router.put('/appointments/:id/cancel', cancelAppointment);
 // Users
 router.get(ADMIN_ROUTES.USERS, getAllUsers);
 
+// Admin Management (Two-Level Approval)
+router.post('/admins', createAdmin);
+router.get('/admins', getAdmins);
+router.get('/admins/:id', getAdminById);
+router.put('/admins/:id/first-approval', firstApprovalAdmin);
+router.put('/admins/:id/second-approval', secondApprovalAdmin);
+router.put('/admins/:id/reject', rejectAdmin);
+
 // Reports & Analytics
 router.get('/reports/specialties', getMostBookedSpecialties);
 router.get('/reports/appointments', getAppointmentStatistics);
@@ -86,6 +124,35 @@ router.get('/reports/no-shows', getNoShowAnalysis);
 router.get('/file-storage/config', getConfig);
 router.put('/file-storage/config', updateConfig);
 router.post('/file-storage/test', testConnection);
+
+// Settings
+router.get('/settings', getSettings);
+router.put('/settings', updateSettings);
+
+// Email Templates
+router.get('/email-templates', getEmailTemplates);
+router.get('/email-templates/:id', getEmailTemplateById);
+router.post('/email-templates', createEmailTemplate);
+router.put('/email-templates/:id', updateEmailTemplate);
+router.delete('/email-templates/:id', deleteEmailTemplate);
+
+// Roles
+router.get('/roles', getRoles);
+router.get('/roles/permissions', getPermissions);
+router.get('/roles/:id', getRoleById);
+router.post('/roles', createRole);
+router.put('/roles/:id', updateRole);
+router.delete('/roles/:id', deleteRole);
+
+// User Role Assignment
+router.put('/users/:userId/role', assignRoleToUser);
+
+// Specializations (Admin CRUD)
+router.get('/specializations', getSpecializations);
+router.get('/specializations/:id', getSpecializationById);
+router.post('/specializations', createSpecialization);
+router.put('/specializations/:id', updateSpecialization);
+router.delete('/specializations/:id', deleteSpecialization);
 
 export default router;
 

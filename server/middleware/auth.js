@@ -58,12 +58,46 @@ export const protect = async (req, res, next) => {
 
 // Role-based authorization
 export const authorize = (...roles) => {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ 
         message: AUTHZ_MESSAGES.ROLE_NOT_AUTHORIZED(req.user.role)
       });
     }
+
+    // For admin role, check if admin is fully approved
+    const { USER_ROLES } = await import('../constants/index.js');
+    if (req.user.role === USER_ROLES.ADMIN) {
+      const Admin = (await import('../models/Admin.js')).default;
+      let admin = await Admin.findOne({ userId: req.user._id });
+      
+      // Handle legacy admins (created before approval system was implemented)
+      // Auto-approve existing admins by creating Admin record with full approval
+      if (!admin) {
+        admin = await Admin.create({
+          userId: req.user._id,
+          firstApproval: {
+            approvedBy: req.user._id, // Self-approved for legacy admins
+            approvedAt: new Date(),
+            isApproved: true
+          },
+          secondApproval: {
+            approvedBy: req.user._id, // Self-approved for legacy admins
+            approvedAt: new Date(),
+            isApproved: true
+          },
+          isFullyApproved: true,
+          isRejected: false
+        });
+      }
+      
+      if (!admin.isFullyApproved || admin.isRejected) {
+        return res.status(403).json({ 
+          message: 'Admin account is not fully approved. Please contact system administrator.' 
+        });
+      }
+    }
+
     next();
   };
 };

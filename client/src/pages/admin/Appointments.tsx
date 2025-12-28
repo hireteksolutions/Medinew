@@ -15,7 +15,15 @@ import {
   User,
   UserCheck,
   FileText,
-  MoreVertical
+  MoreVertical,
+  Mail,
+  Phone,
+  MapPin,
+  IndianRupee,
+  Calendar as CalendarIcon,
+  Award,
+  CreditCard,
+  Languages
 } from 'lucide-react';
 import { getAppointmentStatusColor, APPOINTMENT_STATUSES, TOAST_MESSAGES } from '../../constants';
 import toast from 'react-hot-toast';
@@ -23,6 +31,7 @@ import { exportToPDF } from '../../utils/exportUtils';
 import DatePickerComponent from '../../components/common/DatePicker';
 import Badge from '../../components/common/Badge';
 import { getAppointmentBadgeVariant, getPaymentStatusBadgeVariant } from '../../utils/badgeUtils';
+import Pagination from '../../components/common/Pagination';
 
 interface Appointment {
   _id: string;
@@ -66,15 +75,34 @@ export default function Appointments() {
   const [showDetails, setShowDetails] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  
+  // Pagination state
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(5);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    limit: 5,
+    offset: 0,
+    page: 1,
+    pages: 0
+  });
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setOffset(0);
+  }, [statusFilter, dateFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchAppointments();
-  }, [statusFilter, dateFilter, dateFrom, dateTo]);
+  }, [statusFilter, dateFilter, dateFrom, dateTo, offset]);
 
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const params: any = {};
+      const params: any = { 
+        offset: offset,
+        limit: limit
+      };
       if (searchTerm) params.search = searchTerm;
       if (statusFilter !== 'all') params.status = statusFilter;
       if (dateFilter !== 'all') params.dateFilter = dateFilter;
@@ -82,13 +110,25 @@ export default function Appointments() {
       if (dateTo) params.dateTo = dateTo;
 
       const response = await adminService.getAppointments(params);
-      setAppointments(response.data || []);
+      // Handle paginated response structure: { appointments: [...], pagination: {...} }
+      const appointmentsData = response.data?.appointments || response.data || [];
+      setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
+      
+      // Update pagination state
+      if (response.data?.pagination) {
+        setPagination(response.data.pagination);
+      }
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_APPOINTMENTS_FAILED);
       console.error('Error fetching appointments:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newOffset: number) => {
+    setOffset(newOffset);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSearch = () => {
@@ -394,23 +434,23 @@ export default function Appointments() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      {appointment.patientId.profileImage ? (
+                      {appointment?.patientId && appointment?.patientId?.profileImage ? (
                         <img
-                          src={appointment.patientId.profileImage}
-                          alt={`${appointment.patientId.firstName} ${appointment.patientId.lastName}`}
+                          src={appointment?.patientId?.profileImage}
+                          alt={`${appointment?.patientId?.firstName} ${appointment?.patientId?.lastName}`}
                           className="w-12 h-12 rounded-full mr-4 object-cover border-2 border-primary-100"
                         />
                       ) : (
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold text-lg mr-4 border-2 border-primary-100">
-                          {appointment.patientId.firstName[0]}
+                          {appointment?.patientId?.firstName?.[0]}
                         </div>
                       )}
                       <div>
                         <div className="text-sm font-semibold text-gray-900">
-                          {appointment.patientId.firstName} {appointment.patientId.lastName}
+                          {appointment?.patientId?.firstName} {appointment?.patientId?.lastName}
                         </div>
-                        {appointment.patientId.email && (
-                          <div className="text-xs text-gray-500 mt-0.5">{appointment.patientId.email}</div>
+                        {appointment?.patientId?.email && (
+                          <div className="text-xs text-gray-500 mt-0.5">{appointment?.patientId?.email}</div>
                         )}
                       </div>
                     </div>
@@ -418,37 +458,37 @@ export default function Appointments() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
                       <div className="text-sm font-semibold text-gray-900">
-                        Dr. {appointment.doctorId.firstName} {appointment.doctorId.lastName}
+                        Dr. {appointment?.doctorId?.firstName} {appointment?.doctorId?.lastName}
                       </div>
-                      <div className="text-xs text-primary-600 font-medium mt-0.5">{appointment.doctorId.specialization}</div>
+                      <div className="text-xs text-primary-600 font-medium mt-0.5">{appointment?.doctorId?.specialization}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
                       <div className="flex items-center font-medium">
                         <Calendar className="w-4 h-4 text-primary-500 mr-2 flex-shrink-0" />
-                        <span>{format(new Date(appointment.appointmentDate), 'MMM d, yyyy')}</span>
+                        <span>{format(new Date(appointment?.appointmentDate), 'MMM d, yyyy')}</span>
                       </div>
                       <div className="flex items-center text-gray-500 mt-1.5">
                         <Clock className="w-3.5 h-3.5 text-primary-500 mr-1.5 flex-shrink-0" />
-                        <span className="text-xs">{appointment.timeSlot.start} - {appointment.timeSlot.end}</span>
+                        <span className="text-xs">{appointment?.timeSlot?.start} - {appointment?.timeSlot?.end}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant={getAppointmentBadgeVariant(appointment.status)}>
-                      {appointment.status}
+                    <Badge variant={getAppointmentBadgeVariant(appointment?.status)}>
+                      {appointment?.status}
                     </Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant={getPaymentStatusBadgeVariant(appointment.paymentStatus || 'Pending')}>
-                      {appointment.paymentStatus || 'Pending'}
+                    <Badge variant={getPaymentStatusBadgeVariant(appointment?.paymentStatus || 'Pending')}>
+                      {appointment?.paymentStatus || 'Pending'}
                     </Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="relative" ref={(el) => (dropdownRefs.current[appointment._id] = el)} onClick={(e) => e.stopPropagation()}>
+                    <div className="relative" ref={(el) => (dropdownRefs.current[appointment?._id] = el)} onClick={(e) => e.stopPropagation()}>
                       <button
-                        onClick={() => setOpenDropdownId(openDropdownId === appointment._id ? null : appointment._id)}
+                        onClick={() => setOpenDropdownId(openDropdownId === appointment?._id ? null : appointment?._id)}
                         className="inline-flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                         title="Actions"
                       >
@@ -474,133 +514,257 @@ export default function Appointments() {
               ))}
             </tbody>
           </table>
+          {/* Pagination */}
+          {pagination.total > 0 && (
+            <Pagination
+              total={pagination.total}
+              limit={pagination.limit || limit}
+              offset={pagination.offset || offset}
+              onPageChange={handlePageChange}
+            />
+          )}
         </div>
       )}
 
       {/* Appointment Details Modal */}
       {showDetails && selectedAppointment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Appointment Details</h2>
-                <button
-                  onClick={() => setShowDetails(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDetails(false)}>
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[95vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Appointment Details</h2>
+                  <p className="text-primary-100 text-sm">#{selectedAppointment.appointmentNumber || selectedAppointment._id.slice(-8)}</p>
+                </div>
               </div>
+              <button
+                onClick={() => setShowDetails(false)}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Appointment ID</p>
-                    <p className="text-lg font-semibold">{selectedAppointment.appointmentNumber || selectedAppointment._id}</p>
+            <div className="p-6 sm:p-8 overflow-y-auto max-h-[calc(95vh-140px)]">
+              {/* Patient Information Card */}
+              <div className="mb-6">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-100">
+                  <div className="flex items-center gap-3 mb-4">
+                    <User className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Patient Information</h3>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Status</p>
-                    <Badge variant={getAppointmentBadgeVariant(selectedAppointment.status)}>
-                      {selectedAppointment.status}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <User className="w-5 h-5" />
-                    Patient Information
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Name</p>
-                      <p className="font-medium">
-                        {selectedAppointment.patientId.firstName} {selectedAppointment.patientId.lastName}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Email</p>
-                      <p className="font-medium">{selectedAppointment.patientId.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Phone</p>
-                      <p className="font-medium">{selectedAppointment.patientId.phone || 'N/A'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <UserCheck className="w-5 h-5" />
-                    Doctor Information
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Name</p>
-                      <p className="font-medium">
-                        Dr. {selectedAppointment.doctorId.firstName} {selectedAppointment.doctorId.lastName}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Specialization</p>
-                      <p className="font-medium">{selectedAppointment.doctorId.specialization}</p>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+                    {selectedAppointment?.patientId?.profileImage ? (
+                      <img
+                        src={selectedAppointment.patientId.profileImage}
+                        alt={`${selectedAppointment?.patientId?.firstName} ${selectedAppointment?.patientId?.lastName}`}
+                        className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white shadow-lg">
+                        {selectedAppointment?.patientId?.firstName?.[0] || 'P'}
+                      </div>
+                    )}
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Full Name</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {selectedAppointment?.patientId?.firstName} {selectedAppointment?.patientId?.lastName}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                          <Mail className="w-3.5 h-3.5" />
+                          Email
+                        </p>
+                        <p className="text-sm font-medium text-gray-900 break-all">{selectedAppointment?.patientId?.email}</p>
+                      </div>
+                      {selectedAppointment?.patientId?.phone && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            Phone
+                          </p>
+                          <p className="text-sm font-medium text-gray-900">{selectedAppointment.patientId.phone}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <Calendar className="w-5 h-5" />
-                    Appointment Details
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Date</p>
-                      <p className="font-medium">
-                        {format(new Date(selectedAppointment.appointmentDate), 'MMMM d, yyyy')}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Time</p>
-                      <p className="font-medium">
-                        {selectedAppointment.timeSlot.start} - {selectedAppointment.timeSlot.end}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Consultation Fee</p>
-                      <p className="font-medium">₹{selectedAppointment.consultationFee}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Payment Status</p>
-                      <p className="font-medium">{selectedAppointment.paymentStatus || 'Pending'}</p>
-                    </div>
-                  </div>
-                  {selectedAppointment.reasonForVisit && (
-                    <div className="mt-4">
-                      <p className="text-sm text-gray-500">Reason for Visit</p>
-                      <p className="font-medium">{selectedAppointment.reasonForVisit}</p>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-2">
-                {selectedAppointment.status !== APPOINTMENT_STATUSES.CANCELLED &&
-                  selectedAppointment.status !== APPOINTMENT_STATUSES.COMPLETED && (
-                    <button
-                      onClick={() => {
-                        handleCancel(selectedAppointment);
-                        setShowDetails(false);
-                      }}
-                      className="btn-danger"
-                    >
-                      Cancel Appointment
-                    </button>
-                  )}
-                <button onClick={() => setShowDetails(false)} className="btn-secondary">
-                  Close
-                </button>
+              {/* Doctor Information Card */}
+              <div className="mb-6">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-100">
+                  <div className="flex items-center gap-3 mb-4">
+                    <UserCheck className="w-5 h-5 text-green-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Doctor Information</h3>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+                    {selectedAppointment?.doctorId?.profileImage ? (
+                      <img
+                        src={selectedAppointment.doctorId.profileImage}
+                        alt={`Dr. ${selectedAppointment?.doctorId?.firstName} ${selectedAppointment?.doctorId?.lastName}`}
+                        className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white shadow-lg">
+                        Dr. {selectedAppointment?.doctorId?.firstName?.[0] || 'D'}
+                      </div>
+                    )}
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Doctor Name</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          Dr. {selectedAppointment?.doctorId?.firstName} {selectedAppointment?.doctorId?.lastName}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                          <Award className="w-3.5 h-3.5" />
+                          Specialization
+                        </p>
+                        <p className="text-sm font-semibold text-primary-600">{selectedAppointment?.doctorId?.specialization}</p>
+                      </div>
+                      {selectedAppointment?.doctorId?.email && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5" />
+                            Email
+                          </p>
+                          <p className="text-sm font-medium text-gray-900 break-all">{selectedAppointment.doctorId.email}</p>
+                        </div>
+                      )}
+                      {selectedAppointment?.doctorId?.phone && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            Phone
+                          </p>
+                          <p className="text-sm font-medium text-gray-900">{selectedAppointment.doctorId.phone}</p>
+                        </div>
+                      )}
+                    </div>
+                    {selectedAppointment?.doctorId?.education && selectedAppointment.doctorId.education.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-green-200">
+                        <p className="text-xs font-medium text-gray-600 mb-2 flex items-center gap-1">
+                          <Award className="w-3.5 h-3.5" />
+                          Education
+                        </p>
+                        <div className="space-y-2">
+                          {selectedAppointment.doctorId.education.map((edu: any, index: number) => (
+                            <div key={index} className="text-sm text-gray-900">
+                              <p className="font-semibold">{edu.degree || 'N/A'}</p>
+                              <p className="text-gray-600">{edu.institution || ''} {edu.year ? `(${edu.year})` : ''}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {selectedAppointment?.doctorId?.languages && selectedAppointment.doctorId.languages.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-green-200">
+                        <p className="text-xs font-medium text-gray-600 mb-2 flex items-center gap-1">
+                          <Languages className="w-3.5 h-3.5" />
+                          Languages Spoken
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedAppointment.doctorId.languages.map((lang: string, index: number) => (
+                            <span
+                              key={index}
+                              className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium"
+                            >
+                              {lang}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
+
+              {/* Appointment Details Card */}
+              <div className="mb-6">
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-100">
+                  <div className="flex items-center gap-3 mb-4">
+                    <CalendarIcon className="w-5 h-5 text-purple-600" />
+                    <h3 className="text-lg font-bold text-gray-900">Appointment Details</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <Calendar className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Appointment Date</p>
+                        <p className="text-base font-semibold text-gray-900">
+                          {format(new Date(selectedAppointment?.appointmentDate), 'EEEE, MMMM d, yyyy')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <Clock className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Time Slot</p>
+                        <p className="text-base font-semibold text-gray-900">
+                          {selectedAppointment?.timeSlot?.start} - {selectedAppointment?.timeSlot?.end}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <IndianRupee className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Consultation Fee</p>
+                        <p className="text-base font-semibold text-gray-900">₹{selectedAppointment?.consultationFee}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <CheckCircle className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Appointment Status</p>
+                        <Badge variant={getAppointmentBadgeVariant(selectedAppointment.status)} className="text-xs">
+                          {selectedAppointment.status}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <CreditCard className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">Payment Status</p>
+                        <Badge variant={getPaymentStatusBadgeVariant(selectedAppointment?.paymentStatus || 'Pending')} className="text-xs">
+                          {selectedAppointment?.paymentStatus || 'Pending'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reason for Visit */}
+              {selectedAppointment?.reasonForVisit && (
+                <div className="mb-6">
+                  <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200">
+                    <div className="flex items-center gap-3 mb-3">
+                      <FileText className="w-5 h-5 text-gray-600" />
+                      <h3 className="text-lg font-bold text-gray-900">Reason for Visit</h3>
+                    </div>
+                    <p className="text-gray-700 leading-relaxed">{selectedAppointment.reasonForVisit}</p>
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
         </div>

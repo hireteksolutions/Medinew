@@ -8,6 +8,9 @@ import DatePickerComponent from '../../components/common/DatePicker';
 import { format } from 'date-fns';
 import { Camera, X, Upload, User } from 'lucide-react';
 import { useLoader } from '../../context/LoaderContext';
+import DiseaseCheckboxes from '../../components/common/DiseaseCheckboxes';
+import BMICalculator from '../../components/common/BMICalculator';
+import { CommonDiseaseId } from '../../constants/diseases';
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
@@ -16,6 +19,9 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [profileImage, setProfileImage] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedDiseases, setSelectedDiseases] = useState<CommonDiseaseId[]>([]);
+  const [height, setHeight] = useState<number>(0);
+  const [weight, setWeight] = useState<number>(0);
 
   const { register, handleSubmit, setValue, watch } = useForm();
 
@@ -41,6 +47,18 @@ export default function Profile() {
       if (patientRes.data) {
         setValue('bloodGroup', patientRes.data.bloodGroup);
         setValue('allergies', patientRes.data.allergies?.join(', '));
+        
+        // Set height and weight
+        if (patientRes.data.height) setHeight(patientRes.data.height);
+        if (patientRes.data.weight) setWeight(patientRes.data.weight);
+        
+        // Set selected diseases from chronicConditions
+        if (patientRes.data.chronicConditions && Array.isArray(patientRes.data.chronicConditions)) {
+          const diseaseIds = patientRes.data.chronicConditions
+            .map((condition: any) => condition.condition?.toLowerCase().replace(/\s+/g, '_'))
+            .filter((id: string) => id) as CommonDiseaseId[];
+          setSelectedDiseases(diseaseIds);
+        }
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -97,11 +115,29 @@ export default function Profile() {
 
   const onSubmit = async (data: any) => {
     try {
+      // Calculate BMI if height and weight are provided
+      let calculatedBMI = 0;
+      if (height > 0 && weight > 0) {
+        const heightInMeters = height / 100;
+        calculatedBMI = weight / (heightInMeters * heightInMeters);
+      }
+
+      // Convert selected diseases to chronicConditions format
+      const chronicConditions = selectedDiseases.map((diseaseId) => ({
+        condition: diseaseId,
+        diagnosisDate: new Date(),
+        severity: 'moderate' as const,
+      }));
+
       await Promise.all([
         authService.updateProfile(data),
         patientService.updateProfile({
           bloodGroup: data.bloodGroup,
           allergies: data.allergies?.split(',').map((a: string) => a.trim()).filter(Boolean),
+          height: height > 0 ? height : undefined,
+          weight: weight > 0 ? weight : undefined,
+          bmi: calculatedBMI > 0 ? parseFloat(calculatedBMI.toFixed(1)) : undefined,
+          chronicConditions: chronicConditions,
         }),
       ]);
       toast.success(TOAST_MESSAGES.PROFILE_UPDATED_SUCCESS);
@@ -228,6 +264,7 @@ export default function Profile() {
               </select>
             </div>
           </div>
+          </div>
         </div>
 
         <div>
@@ -249,7 +286,24 @@ export default function Profile() {
               <input {...register('allergies')} className="input-field" placeholder="Peanuts, Penicillin, etc." />
             </div>
           </div>
-          </div>
+        </div>
+
+        {/* BMI Calculator */}
+        <div className="card">
+          <BMICalculator
+            height={height}
+            weight={weight}
+            onHeightChange={setHeight}
+            onWeightChange={setWeight}
+          />
+        </div>
+
+        {/* Common Diseases Checkboxes */}
+        <div className="card">
+          <DiseaseCheckboxes
+            selectedDiseases={selectedDiseases}
+            onChange={setSelectedDiseases}
+          />
         </div>
 
         <div className="card">
