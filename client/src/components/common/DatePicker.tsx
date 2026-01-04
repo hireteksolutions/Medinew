@@ -61,12 +61,12 @@ export const DatePickerComponent: React.FC<DatePickerComponentProps> = ({
 }) => {
   return (
     <DatePicker
-      selected={selected}
+      selected={selected ?? undefined}        // ✅ coerce null to undefined
       onChange={onChange}
       placeholderText={placeholderText}
       dateFormat={showTimeSelect ? `${dateFormat} h:mm aa` : dateFormat}
-      minDate={minDate}
-      maxDate={maxDate}
+      minDate={minDate ?? undefined}          // ✅ same here
+      maxDate={maxDate ?? undefined}          // ✅ same here
       filterDate={filterDate}
       showTimeSelect={showTimeSelect}
       showTimeSelectOnly={showTimeSelectOnly}
@@ -80,8 +80,8 @@ export const DatePickerComponent: React.FC<DatePickerComponentProps> = ({
       required={required}
       selectsStart={selectsStart}
       selectsEnd={selectsEnd}
-      startDate={startDate}
-      endDate={endDate}
+      startDate={startDate ?? undefined}      // ✅ coerce null
+      endDate={endDate ?? undefined}          // ✅ coerce null
       excludeDates={excludeDates}
       includeDates={includeDates}
       inline={inline}
@@ -92,4 +92,3 @@ export const DatePickerComponent: React.FC<DatePickerComponentProps> = ({
 };
 
 export default DatePickerComponent;
-
