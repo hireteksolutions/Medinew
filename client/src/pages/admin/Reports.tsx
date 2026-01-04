@@ -32,6 +32,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import toast from 'react-hot-toast';
+import { TOAST_MESSAGES } from '../../constants';
 import { exportToPDF as exportPDFUtil } from '../../utils/exportUtils';
 
 const COLORS = ['#0066CC', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
@@ -385,7 +386,11 @@ export default function Reports() {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                label={(props: any) => {
+                  const name = props.name || '';
+                  const percent = props.percent || 0;
+                  return `${name}: ${(percent * 100).toFixed(0)}%`;
+                }}
                 outerRadius={100}
                 fill="#8884d8"
                 dataKey="value"

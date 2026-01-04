@@ -17,7 +17,7 @@ import {
   Eye
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { DASHBOARD_ROUTES } from '../../constants';
+import { DASHBOARD_ROUTES, TOAST_MESSAGES } from '../../constants';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
 
@@ -279,7 +279,11 @@ export default function Overview() {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                label={(props: any) => {
+                  const name = props.name || '';
+                  const percent = props.percent || 0;
+                  return `${name}: ${(percent * 100).toFixed(0)}%`;
+                }}
                 outerRadius={100}
                 fill="#8884d8"
                 dataKey="value"
@@ -311,7 +315,7 @@ export default function Overview() {
           <button
             onClick={() => {
               // TODO: Implement notification modal
-              toast.info(TOAST_MESSAGES.NOTIFICATION_FEATURE_COMING_SOON);
+              toast(TOAST_MESSAGES.NOTIFICATION_FEATURE_COMING_SOON, { icon: 'ℹ️' });
             }}
             className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 transition-colors text-left"
           >
@@ -334,7 +338,7 @@ export default function Overview() {
           <button
             onClick={() => {
               // TODO: Implement system logs view
-              toast.info(TOAST_MESSAGES.SYSTEM_LOGS_FEATURE_COMING_SOON);
+              toast(TOAST_MESSAGES.SYSTEM_LOGS_FEATURE_COMING_SOON, { icon: 'ℹ️' });
             }}
             className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 transition-colors text-left"
           >

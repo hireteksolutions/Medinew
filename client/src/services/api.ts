@@ -283,8 +283,8 @@ export const doctorDashboardService = {
     return api.put(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.getAppointmentById(id)}`, data);
   },
 
-  getPatients: () => {
-    return api.get(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.PATIENTS}`);
+  getPatients: (params?: any) => {
+    return api.get(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.PATIENTS}`, { params });
   },
 
   getPatientHistory: (patientId: string) => {

@@ -744,7 +744,7 @@ export default function Register() {
                     Date of Birth
                   </label>
                   <DatePickerComponent
-                    selected={watch('dateOfBirth') ? new Date(watch('dateOfBirth')) : null}
+                    selected={watch('dateOfBirth') ? new Date(watch('dateOfBirth') as string) : null}
                     onChange={(date) => {
                       if (date) {
                         setValue('dateOfBirth', format(date, 'yyyy-MM-dd'), { shouldValidate: true });

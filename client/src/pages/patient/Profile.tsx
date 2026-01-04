@@ -100,7 +100,9 @@ export default function Profile() {
       await authService.updateProfile({ profileImage: imageUrl });
       
       setProfileImage(imageUrl);
-      updateUser({ ...user, profileImage: imageUrl });
+      if (user) {
+        updateUser({ ...user, profileImage: imageUrl });
+      }
       toast.success('Profile photo updated successfully!');
     } catch (error: any) {
       console.error('Error uploading image:', error);
@@ -197,7 +199,9 @@ export default function Profile() {
                     try {
                       await authService.updateProfile({ profileImage: '' });
                       setProfileImage('');
-                      updateUser({ ...user, profileImage: '' });
+                      if (user) {
+                        updateUser({ ...user, profileImage: '' });
+                      }
                       toast.success('Profile photo removed');
                     } catch (error) {
                       toast.error('Failed to remove profile photo');

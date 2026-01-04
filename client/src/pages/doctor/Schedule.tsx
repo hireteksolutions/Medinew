@@ -563,7 +563,9 @@ export default function Schedule() {
                         </span>
                       )}
                       {!isModified && day.isAvailable && day.timeSlots.length > 0 && (
-                        <CheckCircle className="w-6 h-6 text-green-500" title="Saved" />
+                        <div title="Saved">
+                          <CheckCircle className="w-6 h-6 text-green-500" />
+                        </div>
                       )}
                       {isModified && (
                         <span className="px-3 py-1 text-xs font-bold rounded-full bg-yellow-400 text-yellow-900 animate-pulse shadow-sm">

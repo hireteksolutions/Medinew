@@ -33,11 +33,11 @@ export default function DiseaseCheckboxes({
   // Group diseases by category
   const diseasesByCategory = COMMON_DISEASES.reduce((acc, disease) => {
     if (!acc[disease.category]) {
-      acc[disease.category] = [];
+      acc[disease.category] = [] as Array<typeof COMMON_DISEASES[number]>;
     }
     acc[disease.category].push(disease);
     return acc;
-  }, {} as Record<string, typeof COMMON_DISEASES>);
+  }, {} as Record<string, Array<typeof COMMON_DISEASES[number]>>);
 
   const categoryLabels: Record<string, string> = {
     metabolic: 'Metabolic',

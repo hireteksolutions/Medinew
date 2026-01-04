@@ -259,8 +259,7 @@ export default function Profile() {
               <input
                 {...register('experience', {
                   min: 0,
-                  max: FORM_LIMITS.EXPERIENCE_MAX,
-                  step: 0.1
+                  max: FORM_LIMITS.EXPERIENCE_MAX
                 })}
                 type="number"
                 step="0.1"

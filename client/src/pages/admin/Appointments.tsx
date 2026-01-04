@@ -49,6 +49,11 @@ interface Appointment {
     firstName: string;
     lastName: string;
     specialization: string;
+    email?: string;
+    phone?: string;
+    profileImage?: string;
+    education?: Array<{ degree?: string; institution?: string; year?: string }>;
+    languages?: string[];
   };
   appointmentDate: string;
   timeSlot: {
