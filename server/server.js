@@ -29,7 +29,68 @@ import paymentRoutes from './routes/payment.js';
 // Database configuration
 import connectDB from './config/database.js';
 
-dotenv.config();
+// Load environment variables based on NODE_ENV
+// Automatically selects: .env.development (local) or .env.production (production)
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Auto-detect environment if NODE_ENV is not explicitly set
+let nodeEnv = process.env.NODE_ENV;
+
+if (!nodeEnv) {
+  const prodFile = path.resolve(__dirname, '.env.production');
+  const devFile = path.resolve(__dirname, '.env.development');
+  
+  // Check which file exists (production takes priority if both exist)
+  if (fs.existsSync(prodFile)) {
+    nodeEnv = 'production';
+    console.log('🔍 Auto-detected: production environment (found .env.production)');
+  } else if (fs.existsSync(devFile)) {
+    nodeEnv = 'development';
+    console.log('🔍 Auto-detected: development environment (found .env.development)');
+  } else {
+    nodeEnv = 'development'; // Default to development
+    console.log('🔍 Defaulting to: development environment');
+  }
+}
+
+const envFile = `.env.${nodeEnv}`;
+const envFilePath = path.resolve(__dirname, envFile);
+
+// Load environment-specific file
+const envResult = dotenv.config({ path: envFilePath });
+
+// If environment-specific file doesn't exist, try fallback
+if (envResult.error && nodeEnv !== 'production') {
+  // Fallback to .env for backward compatibility
+  const fallbackPath = path.resolve(__dirname, '.env');
+  if (fs.existsSync(fallbackPath)) {
+    const fallbackResult = dotenv.config({ path: fallbackPath, override: false });
+    if (!fallbackResult.error) {
+      console.log(`⚠️  ${envFile} not found, using .env as fallback`);
+    }
+  } else {
+    console.error(`❌ Error: Neither ${envFile} nor .env file found`);
+  }
+} else if (envResult.error) {
+  console.error(`❌ Error loading ${envFile}:`, envResult.error.message);
+  console.error(`⚠️  Make sure ${envFile} exists for production deployment`);
+  process.exit(1);
+} else {
+  console.log(`✅ Loaded environment from: ${envFile}`);
+}
+
+// Set NODE_ENV if it wasn't already set
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = nodeEnv;
+}
+
+// Log current environment
+console.log(`📋 Running in: ${nodeEnv} mode`);
 
 const app = express();
 

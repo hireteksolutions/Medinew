@@ -23,6 +23,11 @@ import {
 // Note: API_ROUTES already include /api prefix, so baseURL should not include it
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+// Log API URL in development (helps with debugging)
+if (import.meta.env.DEV) {
+  console.log(`🔗 Backend API URL: ${API_URL}`);
+}
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {
