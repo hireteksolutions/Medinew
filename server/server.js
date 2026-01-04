@@ -95,8 +95,29 @@ console.log(`📋 Running in: ${nodeEnv} mode`);
 const app = express();
 
 // CORS configuration (must be before other middleware)
+// Support multiple origins for flexibility
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'https://medi-new-client.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5173', // Vite default port
+].filter(Boolean); // Remove undefined values
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Log for debugging
+      console.log(`CORS blocked origin: ${origin}`);
+      console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
