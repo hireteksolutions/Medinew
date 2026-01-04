@@ -50,25 +50,35 @@ class FileStorageService {
   }
 
   /**
-   * Initialize AWS S3 provider
+   * Initialize AWS S3 provider (also supports S3-compatible services like Supabase)
    */
   async initAWS() {
     try {
-      const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+      const { S3Client } = await import('@aws-sdk/client-s3');
       
-      const s3Client = new S3Client({
+      const s3Config = {
         region: this.config.awsS3.region || 'us-east-1',
         credentials: {
           accessKeyId: this.config.awsS3.accessKeyId,
           secretAccessKey: this.config.awsS3.secretAccessKey
-        },
-        ...(this.config.awsS3.endpoint && { endpoint: this.config.awsS3.endpoint })
-      });
+        }
+      };
+
+      // For S3-compatible services (like Supabase), add custom endpoint
+      if (this.config.awsS3.endpoint) {
+        s3Config.endpoint = this.config.awsS3.endpoint;
+        // Force path style for S3-compatible services
+        s3Config.forcePathStyle = true;
+      }
+
+      const s3Client = new S3Client(s3Config);
 
       return {
         type: 'aws-s3',
         client: s3Client,
-        bucket: this.config.awsS3.bucketName
+        bucket: this.config.awsS3.bucketName,
+        endpoint: this.config.awsS3.endpoint,
+        region: this.config.awsS3.region
       };
     } catch (error) {
       console.error('AWS S3 initialization failed:', error);
@@ -231,7 +241,7 @@ class FileStorageService {
   }
 
   /**
-   * Upload to AWS S3
+   * Upload to AWS S3 (or S3-compatible service like Supabase)
    */
   async uploadToS3(buffer, fileName, mimeType, fileType) {
     const { PutObjectCommand } = await import('@aws-sdk/client-s3');
@@ -245,21 +255,25 @@ class FileStorageService {
       ACL: 'private'
     }));
 
-    // Generate S3 URL - handle different region formats
-    const region = this.config.awsS3.region || AWS_DEFAULTS.DEFAULT_REGION;
+    // Generate file URL
     let fileUrl;
     
-    if (region === 'us-east-1') {
-      // us-east-1 uses different URL format (no region in URL)
-      fileUrl = `https://${this.provider.bucket}.s3.amazonaws.com/${key}`;
+    // If custom endpoint is provided (Supabase or other S3-compatible), use it
+    if (this.provider.endpoint) {
+      // For Supabase: endpoint format is https://xxx.storage.supabase.co/storage/v1/s3
+      // File URL should be: endpoint/bucket/key
+      fileUrl = `${this.provider.endpoint}/${this.provider.bucket}/${key}`;
     } else {
-      // Other regions include region in URL
-      fileUrl = `https://${this.provider.bucket}.s3.${region}.amazonaws.com/${key}`;
-    }
-    
-    // Use custom endpoint if provided
-    if (this.config.awsS3.endpoint) {
-      fileUrl = `${this.config.awsS3.endpoint}/${this.provider.bucket}/${key}`;
+      // Standard AWS S3 URL generation
+      const region = this.provider.region || AWS_DEFAULTS.DEFAULT_REGION;
+      
+      if (region === 'us-east-1') {
+        // us-east-1 uses different URL format (no region in URL)
+        fileUrl = `https://${this.provider.bucket}.s3.amazonaws.com/${key}`;
+      } else {
+        // Other regions include region in URL
+        fileUrl = `https://${this.provider.bucket}.s3.${region}.amazonaws.com/${key}`;
+      }
     }
     
     return {
