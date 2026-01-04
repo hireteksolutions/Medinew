@@ -57,7 +57,9 @@ const userSchema = new mongoose.Schema({
     street: String,
     city: String,
     state: String,
-    zipCode: String
+    zipCode: String,
+    latitude: Number,
+    longitude: Number
   },
   profileImage: {
     type: String,

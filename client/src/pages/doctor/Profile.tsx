@@ -48,11 +48,24 @@ export default function Profile() {
       setProfile(profileRes.data);
       const userData = userRes.data?.user;
       setProfileImage(userData?.profileImage || '');
+      
+      // Set doctor fields
       setValue('specialization', profileRes.data.specialization);
       setValue('consultationFee', profileRes.data.consultationFee);
       setValue('experience', profileRes.data.experience);
       setValue('biography', profileRes.data.biography);
       setValue('consultationDuration', profileRes.data.consultationDuration);
+      setValue('consultationType', profileRes.data.consultationType || ['both']);
+      
+      // Set address fields
+      if (userData?.address) {
+        setValue('address.street', userData.address.street || '');
+        setValue('address.city', userData.address.city || '');
+        setValue('address.state', userData.address.state || '');
+        setValue('address.zipCode', userData.address.zipCode || '');
+        setValue('address.latitude', userData.address.latitude || '');
+        setValue('address.longitude', userData.address.longitude || '');
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
@@ -82,8 +95,8 @@ export default function Profile() {
 
       // Upload file
       const uploadResponse = await fileService.upload(file, {
-        relatedEntityType: 'user',
-        relatedEntityId: user?._id,
+        relatedEntityType: 'profile-image',
+        relatedEntityId: user?.id,
         isPublic: 'true'
       });
 
@@ -110,11 +123,46 @@ export default function Profile() {
 
   const onSubmit = async (data: any) => {
     try {
-      await doctorDashboardService.updateProfile(data);
+      // Separate address and consultationType from doctor profile data
+      const { address, consultationType, ...doctorData } = data;
+      
+      // Prepare consultationType array
+      let consultationTypeArray = ['both'];
+      if (consultationType) {
+        if (Array.isArray(consultationType)) {
+          consultationTypeArray = consultationType.length > 0 ? consultationType : ['both'];
+        } else {
+          consultationTypeArray = [consultationType];
+        }
+      }
+      
+      // Update doctor profile
+      await doctorDashboardService.updateProfile({
+        ...doctorData,
+        consultationType: consultationTypeArray
+      });
+      
+      // Update user address if provided
+      if (address && Object.keys(address).some(key => address[key] !== '' && address[key] !== null && address[key] !== undefined)) {
+        // Clean up empty values
+        const cleanAddress: any = {};
+        if (address.street) cleanAddress.street = address.street;
+        if (address.city) cleanAddress.city = address.city;
+        if (address.state) cleanAddress.state = address.state;
+        if (address.zipCode) cleanAddress.zipCode = address.zipCode;
+        if (address.latitude) cleanAddress.latitude = parseFloat(address.latitude);
+        if (address.longitude) cleanAddress.longitude = parseFloat(address.longitude);
+        
+        if (Object.keys(cleanAddress).length > 0) {
+          await authService.updateProfile({ address: cleanAddress });
+        }
+      }
+      
       toast.success(TOAST_MESSAGES.PROFILE_UPDATED_SUCCESS);
       fetchProfile();
-    } catch (error) {
-      toast.error(TOAST_MESSAGES.PROFILE_UPDATE_FAILED);
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.PROFILE_UPDATE_FAILED);
     }
   };
 
@@ -300,6 +348,107 @@ export default function Profile() {
             <p className="mt-1 text-xs text-gray-500">Max: 1000 characters</p>
           </div>
           </div>
+        </div>
+
+        {/* Location Information Section */}
+        <div className="card space-y-6">
+          <h2 className="text-xl font-semibold mb-4">Location Information</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Street Address</label>
+              <input
+                {...register('address.street')}
+                type="text"
+                className="input-field"
+                placeholder="Street address"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+              <input
+                {...register('address.city')}
+                type="text"
+                className="input-field"
+                placeholder="City"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+              <input
+                {...register('address.state')}
+                type="text"
+                className="input-field"
+                placeholder="State"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">ZIP Code</label>
+              <input
+                {...register('address.zipCode')}
+                type="text"
+                className="input-field"
+                placeholder="ZIP Code"
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Latitude (optional - for GPS search)
+              </label>
+              <input
+                {...register('address.latitude', {
+                  valueAsNumber: true
+                })}
+                type="number"
+                step="any"
+                className="input-field"
+                placeholder="e.g., 28.6139"
+              />
+              <p className="mt-1 text-xs text-gray-500">Leave empty to auto-detect from address</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Longitude (optional - for GPS search)
+              </label>
+              <input
+                {...register('address.longitude', {
+                  valueAsNumber: true
+                })}
+                type="number"
+                step="any"
+                className="input-field"
+                placeholder="e.g., 77.2090"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Consultation Type Section */}
+        <div className="card space-y-4">
+          <h2 className="text-xl font-semibold mb-4">Consultation Type</h2>
+          <div className="flex flex-wrap gap-6">
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                {...register('consultationType')}
+                value="online"
+                className="mr-2 w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+              />
+              <span className="text-gray-700">Online Consultations</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                {...register('consultationType')}
+                value="offline"
+                className="mr-2 w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+              />
+              <span className="text-gray-700">Offline Consultations</span>
+            </label>
+          </div>
+          <p className="text-xs text-gray-500">Select at least one consultation type. Patients will see this when searching for doctors.</p>
         </div>
 
         <div className="card">

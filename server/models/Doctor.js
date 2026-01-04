@@ -77,6 +77,13 @@ const doctorSchema = new mongoose.Schema({
     type: Number,
     default: DATE_CONSTANTS.DEFAULT_CONSULTATION_DURATION // minutes
   },
+  consultationType: {
+    type: [{
+      type: String,
+      enum: ['online', 'offline', 'both']
+    }],
+    default: ['both']
+  },
   isApproved: {
     type: Boolean,
     default: false

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { doctorDashboardService } from '../../services/api';
-import { Users, Mail, Phone, Calendar, Search, Eye, User as UserIcon, X, Clock, FileText, IndianRupee, CreditCard } from 'lucide-react';
+import { Users, Mail, Phone, Calendar, Search, Eye, User as UserIcon, X, Clock, FileText, IndianRupee, CreditCard, Activity, Heart, Pill, AlertCircle, Scale } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import Badge from '../../components/common/Badge';
@@ -363,6 +363,186 @@ export default function Patients() {
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Medical Information & BMI Section */}
+              <div className="border-t pt-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* BMI Data */}
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-5 border border-blue-200">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Scale className="w-5 h-5 text-blue-600" />
+                      <h4 className="text-lg font-semibold text-gray-900">BMI & Physical Data</h4>
+                    </div>
+                    <div className="space-y-3">
+                      {selectedPatient.bmi !== undefined && selectedPatient.bmi !== null ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">BMI:</span>
+                          <span className="text-lg font-bold text-blue-700">
+                            {selectedPatient.bmi.toFixed(1)}
+                            <span className="text-xs font-normal text-gray-500 ml-1">
+                              {selectedPatient.bmi < 18.5 ? '(Underweight)' :
+                               selectedPatient.bmi < 25 ? '(Normal)' :
+                               selectedPatient.bmi < 30 ? '(Overweight)' : '(Obese)'}
+                            </span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">BMI: Not available</div>
+                      )}
+                      {selectedPatient.height !== undefined && selectedPatient.height !== null ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Height:</span>
+                          <span className="text-base font-semibold text-gray-900">
+                            {selectedPatient.height} cm
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">Height: Not available</div>
+                      )}
+                      {selectedPatient.weight !== undefined && selectedPatient.weight !== null ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Weight:</span>
+                          <span className="text-base font-semibold text-gray-900">
+                            {selectedPatient.weight} kg
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">Weight: Not available</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Medical Information */}
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-5 border border-green-200">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Heart className="w-5 h-5 text-green-600" />
+                      <h4 className="text-lg font-semibold text-gray-900">Medical Information</h4>
+                    </div>
+                    <div className="space-y-3">
+                      {selectedPatient.bloodGroup ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Blood Group:</span>
+                          <Badge variant="info" className="font-semibold">
+                            {selectedPatient.bloodGroup}
+                          </Badge>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">Blood Group: Not available</div>
+                      )}
+                      {selectedPatient.allergies && selectedPatient.allergies.length > 0 ? (
+                        <div>
+                          <span className="text-sm text-gray-600 block mb-1">Allergies:</span>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedPatient.allergies.map((allergy: string, index: number) => (
+                              <Badge key={index} variant="warning" className="text-xs">
+                                {allergy}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">Allergies: None recorded</div>
+                      )}
+                      {selectedPatient.currentMedications && selectedPatient.currentMedications.length > 0 ? (
+                        <div>
+                          <span className="text-sm text-gray-600 block mb-1">Current Medications:</span>
+                          <div className="space-y-1">
+                            {selectedPatient.currentMedications.slice(0, 3).map((med: any, index: number) => (
+                              <div key={index} className="text-xs text-gray-700 bg-white/50 rounded px-2 py-1">
+                                <span className="font-medium">{med.name}</span>
+                                {med.dosage && <span className="text-gray-500"> - {med.dosage}</span>}
+                              </div>
+                            ))}
+                            {selectedPatient.currentMedications.length > 3 && (
+                              <div className="text-xs text-gray-500">
+                                +{selectedPatient.currentMedications.length - 3} more
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">Current Medications: None</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Common Health Conditions */}
+              <div className="border-t pt-6 mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Activity className="w-5 h-5 text-primary-600" />
+                  <h4 className="text-xl font-semibold">Common Health Conditions</h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Chronic Conditions */}
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle className="w-4 h-4 text-orange-600" />
+                      <h5 className="font-semibold text-gray-900">Chronic Conditions</h5>
+                    </div>
+                    {selectedPatient.chronicConditions && selectedPatient.chronicConditions.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedPatient.chronicConditions.map((condition: any, index: number) => (
+                          <div key={index} className="bg-white rounded p-3 border border-gray-200">
+                            <div className="flex items-start justify-between mb-1">
+                              <span className="font-medium text-gray-900">{condition.condition}</span>
+                              {condition.severity && (
+                                <Badge 
+                                  variant={
+                                    condition.severity === 'severe' ? 'danger' :
+                                    condition.severity === 'moderate' ? 'warning' : 'info'
+                                  }
+                                  className="text-xs"
+                                >
+                                  {condition.severity}
+                                </Badge>
+                              )}
+                            </div>
+                            {condition.diagnosisDate && (
+                              <div className="text-xs text-gray-500 mb-1">
+                                Diagnosed: {format(new Date(condition.diagnosisDate), 'MMM d, yyyy')}
+                              </div>
+                            )}
+                            {condition.notes && (
+                              <div className="text-xs text-gray-600 mt-1">{condition.notes}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500 text-center py-4">No chronic conditions recorded</div>
+                    )}
+                  </div>
+
+                  {/* Medical History */}
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      <h5 className="font-semibold text-gray-900">Medical History</h5>
+                    </div>
+                    {selectedPatient.medicalHistory && selectedPatient.medicalHistory.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedPatient.medicalHistory.map((history: any, index: number) => (
+                          <div key={index} className="bg-white rounded p-3 border border-gray-200">
+                            <div className="font-medium text-gray-900 mb-1">{history.condition}</div>
+                            {history.diagnosisDate && (
+                              <div className="text-xs text-gray-500 mb-1">
+                                {format(new Date(history.diagnosisDate), 'MMM d, yyyy')}
+                              </div>
+                            )}
+                            {history.notes && (
+                              <div className="text-xs text-gray-600 mt-1">{history.notes}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500 text-center py-4">No medical history recorded</div>
+                    )}
                   </div>
                 </div>
               </div>

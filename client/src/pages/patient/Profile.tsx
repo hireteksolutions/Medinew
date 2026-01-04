@@ -89,8 +89,8 @@ export default function Profile() {
 
       // Upload file
       const uploadResponse = await fileService.upload(file, {
-        relatedEntityType: 'user',
-        relatedEntityId: user?._id,
+        relatedEntityType: 'profile-image',
+        relatedEntityId: user?.id,
         isPublic: 'true'
       });
 

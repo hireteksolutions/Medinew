@@ -31,47 +31,47 @@ export default function Overview() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-8">Dashboard Overview</h1>
+      <h1 className="text-xl font-bold mb-6">Dashboard Overview</h1>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="card">
+        <div className="card p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 mb-1">Today's Appointments</p>
-              <p className="text-3xl font-bold text-primary-500">{stats.todayAppointments}</p>
+              <p className="text-sm text-gray-600 mb-1">Today's Appointments</p>
+              <p className="text-2xl font-bold text-primary-500">{stats.todayAppointments}</p>
             </div>
-            <Calendar className="w-12 h-12 text-primary-500" />
+            <Calendar className="w-8 h-8 text-primary-500" />
           </div>
         </div>
-        <div className="card">
+        <div className="card p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 mb-1">Total Patients</p>
-              <p className="text-3xl font-bold text-primary-500">{stats.totalPatients}</p>
+              <p className="text-sm text-gray-600 mb-1">Total Patients</p>
+              <p className="text-2xl font-bold text-primary-500">{stats.totalPatients}</p>
             </div>
-            <Users className="w-12 h-12 text-primary-500" />
+            <Users className="w-8 h-8 text-primary-500" />
           </div>
         </div>
-        <div className="card">
+        <div className="card p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 mb-1">Average Rating</p>
-              <p className="text-3xl font-bold text-primary-500">{stats.avgRating.toFixed(1)}</p>
+              <p className="text-sm text-gray-600 mb-1">Average Rating</p>
+              <p className="text-2xl font-bold text-primary-500">{stats.avgRating.toFixed(1)}</p>
             </div>
-            <Star className="w-12 h-12 text-primary-500" />
+            <Star className="w-8 h-8 text-primary-500" />
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4">Total Appointments</h2>
-          <p className="text-4xl font-bold text-primary-500">{stats.totalAppointments}</p>
+        <div className="card p-3 sm:p-4">
+          <h2 className="text-lg font-semibold mb-4">Total Appointments</h2>
+          <p className="text-3xl font-bold text-primary-500">{stats.totalAppointments}</p>
         </div>
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4">Completed Appointments</h2>
-          <p className="text-4xl font-bold text-success-500">{stats.completedAppointments}</p>
+        <div className="card p-3 sm:p-4">
+          <h2 className="text-lg font-semibold mb-4">Completed Appointments</h2>
+          <p className="text-3xl font-bold text-success-500">{stats.completedAppointments}</p>
         </div>
       </div>
     </div>

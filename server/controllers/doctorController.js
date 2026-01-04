@@ -48,7 +48,8 @@ export const updateProfile = async (req, res) => {
       languages,
       biography,
       consultationDuration,
-      certifications
+      certifications,
+      consultationType // Add this
     } = req.body;
 
     let doctor = await Doctor.findOne({ userId: req.user._id });
@@ -77,11 +78,36 @@ export const updateProfile = async (req, res) => {
     if (biography !== undefined) doctor.biography = biography;
     if (consultationDuration) doctor.consultationDuration = consultationDuration;
     if (certifications) doctor.certifications = certifications;
+    
+    // Handle consultationType
+    if (consultationType !== undefined) {
+      // Ensure it's an array and has valid values
+      const validTypes = ['online', 'offline', 'both'];
+      let filteredTypes;
+      
+      if (Array.isArray(consultationType)) {
+        filteredTypes = consultationType.filter(t => validTypes.includes(t));
+      } else {
+        filteredTypes = [consultationType].filter(t => validTypes.includes(t));
+      }
+      
+      // If no valid types, default to 'both'
+      if (filteredTypes.length === 0) {
+        filteredTypes = ['both'];
+      }
+      
+      // If both 'online' and 'offline' are selected, set to 'both'
+      if (filteredTypes.includes('online') && filteredTypes.includes('offline')) {
+        filteredTypes = ['both'];
+      }
+      
+      doctor.consultationType = filteredTypes;
+    }
 
     await doctor.save();
     
     const updatedDoctor = await Doctor.findOne({ userId: req.user._id })
-      .populate('userId', 'firstName lastName email phone profileImage');
+      .populate('userId', 'firstName lastName email phone profileImage address');
     
     res.json({ message: DOCTOR_MESSAGES.PROFILE_UPDATED_SUCCESSFULLY, doctor: updatedDoctor });
   } catch (error) {

@@ -4,7 +4,7 @@ import { patientService, appointmentService, reviewService } from '../../service
 import { useLoader } from '../../context/LoaderContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { Calendar, X, Star, Clock, MoreVertical, IndianRupee } from 'lucide-react';
+import { Calendar, X, Star, Clock, MoreVertical, IndianRupee, Plus, Stethoscope, Heart, ArrowRight, Sparkles } from 'lucide-react';
 import { APPOINTMENT_STATUSES, APPOINTMENT_FILTERS, canCancelAppointment, TOAST_MESSAGES } from '../../constants';
 import Badge from '../../components/common/Badge';
 import Pagination from '../../components/common/Pagination';
@@ -21,6 +21,10 @@ export default function Appointments() {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const navigate = useNavigate();
+  const [favoriteDoctors, setFavoriteDoctors] = useState<any[]>([]);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [recentDoctors, setRecentDoctors] = useState<any[]>([]);
+  const [showQuickBook, setShowQuickBook] = useState(true);
   
   // Pagination state
   const [offset, setOffset] = useState(0);
@@ -41,6 +45,16 @@ export default function Appointments() {
   useEffect(() => {
     fetchAppointments();
   }, [filter, offset]);
+
+  useEffect(() => {
+    fetchFavoriteDoctors();
+    extractRecentDoctors();
+  }, []);
+
+  useEffect(() => {
+    // Update recent doctors when appointments change
+    extractRecentDoctors();
+  }, [appointments]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -158,6 +172,50 @@ export default function Appointments() {
            canCancelAppointment(appointment.status);
   };
 
+  const fetchFavoriteDoctors = async () => {
+    try {
+      setLoadingFavorites(true);
+      const response = await patientService.getFavoriteDoctors();
+      const doctorsData = response.data?.doctors || response.data || [];
+      setFavoriteDoctors(Array.isArray(doctorsData) ? doctorsData.slice(0, 3) : []);
+    } catch (error) {
+      console.error('Error fetching favorite doctors:', error);
+      setFavoriteDoctors([]);
+    } finally {
+      setLoadingFavorites(false);
+    }
+  };
+
+  const extractRecentDoctors = () => {
+    // Extract unique doctors from recent appointments
+    const doctorMap = new Map();
+    appointments.forEach((appointment: any) => {
+      if (appointment.doctorId && appointment.doctorId._id) {
+        const doctorId = appointment.doctorId._id;
+        if (!doctorMap.has(doctorId)) {
+          doctorMap.set(doctorId, {
+            ...appointment.doctorId,
+            lastAppointmentDate: appointment.appointmentDate
+          });
+        }
+      }
+    });
+    const recent = Array.from(doctorMap.values())
+      .sort((a: any, b: any) => 
+        new Date(b.lastAppointmentDate).getTime() - new Date(a.lastAppointmentDate).getTime()
+      )
+      .slice(0, 3);
+    setRecentDoctors(recent);
+  };
+
+  const handleBookAppointment = (doctorId?: string) => {
+    if (doctorId) {
+      navigate(`/book-appointment/${doctorId}`);
+    } else {
+      navigate('/book-appointment');
+    }
+  };
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
@@ -165,39 +223,158 @@ export default function Appointments() {
           <h1 className="text-3xl font-bold text-gray-900">My Appointments</h1>
           <p className="text-gray-600 mt-1">Manage and track all your appointments</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           <button
-            onClick={() => setFilter(APPOINTMENT_FILTERS.ALL)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              filter === APPOINTMENT_FILTERS.ALL 
-                ? 'bg-primary-500 text-white shadow-md' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            onClick={() => handleBookAppointment()}
+            className="px-6 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
           >
-            All
+            <Plus className="w-5 h-5" />
+            <span>Book New Appointment</span>
           </button>
-          <button
-            onClick={() => setFilter(APPOINTMENT_FILTERS.UPCOMING)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              filter === APPOINTMENT_FILTERS.UPCOMING 
-                ? 'bg-primary-500 text-white shadow-md' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            Upcoming
-          </button>
-          <button
-            onClick={() => setFilter(APPOINTMENT_FILTERS.PAST)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              filter === APPOINTMENT_FILTERS.PAST 
-                ? 'bg-primary-500 text-white shadow-md' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            Past
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setFilter(APPOINTMENT_FILTERS.ALL)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                filter === APPOINTMENT_FILTERS.ALL 
+                  ? 'bg-primary-500 text-white shadow-md' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilter(APPOINTMENT_FILTERS.UPCOMING)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                filter === APPOINTMENT_FILTERS.UPCOMING 
+                  ? 'bg-primary-500 text-white shadow-md' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Upcoming
+            </button>
+            <button
+              onClick={() => setFilter(APPOINTMENT_FILTERS.PAST)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                filter === APPOINTMENT_FILTERS.PAST 
+                  ? 'bg-primary-500 text-white shadow-md' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Past
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Quick Book Section */}
+      {(favoriteDoctors.length > 0 || recentDoctors.length > 0) && showQuickBook && (
+        <div className="card mb-6 bg-gradient-to-br from-primary-50 to-blue-50 border-2 border-primary-200">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary-600" />
+              <h2 className="text-xl font-bold text-gray-900">Quick Book</h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => handleBookAppointment()}
+                className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+              >
+                View All Doctors
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowQuickBook(false)}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Close Quick Book"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Favorite Doctors */}
+            {favoriteDoctors.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Heart className="w-4 h-4 text-red-500" />
+                  <h3 className="font-semibold text-gray-700">Book with Favorite Doctor</h3>
+                </div>
+                <div className="space-y-2">
+                  {favoriteDoctors.map((doctor: any) => (
+                    <button
+                      key={doctor._id || doctor.userId?._id}
+                      onClick={() => handleBookAppointment(doctor.userId?._id || doctor._id)}
+                      className="w-full text-left p-3 bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-3">
+                        {doctor.userId?.profileImage ? (
+                          <img
+                            src={doctor.userId.profileImage}
+                            alt={doctor.userId.firstName}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold text-sm">
+                            {doctor.userId?.firstName?.[0] || 'D'}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-semibold text-gray-900 text-sm">
+                            Dr. {doctor.userId?.firstName || doctor.firstName} {doctor.userId?.lastName || doctor.lastName}
+                          </div>
+                          <div className="text-xs text-primary-600">{doctor.specialization}</div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recent Doctors */}
+            {recentDoctors.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="w-4 h-4 text-primary-500" />
+                  <h3 className="font-semibold text-gray-700">Book with Recent Doctor</h3>
+                </div>
+                <div className="space-y-2">
+                  {recentDoctors.map((doctor: any) => (
+                    <button
+                      key={doctor._id}
+                      onClick={() => handleBookAppointment(doctor._id)}
+                      className="w-full text-left p-3 bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-3">
+                        {doctor.profileImage ? (
+                          <img
+                            src={doctor.profileImage}
+                            alt={doctor.firstName}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold text-sm">
+                            {doctor.firstName?.[0] || 'D'}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-semibold text-gray-900 text-sm">
+                            Dr. {doctor.firstName} {doctor.lastName}
+                          </div>
+                          <div className="text-xs text-primary-600">{doctor.specialization}</div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="card text-center py-12">
@@ -206,9 +383,27 @@ export default function Appointments() {
         </div>
       ) : appointments.length === 0 ? (
         <div className="card text-center py-12">
-          <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg mb-2">No appointments found</p>
-          <p className="text-gray-400 text-sm">Start by booking your first appointment</p>
+          <div className="max-w-md mx-auto">
+            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Calendar className="w-10 h-10 text-primary-600" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">No appointments found</h3>
+            <p className="text-gray-600 mb-6">
+              {filter === APPOINTMENT_FILTERS.UPCOMING 
+                ? "You don't have any upcoming appointments"
+                : filter === APPOINTMENT_FILTERS.PAST
+                ? "You don't have any past appointments"
+                : "Start by booking your first appointment"}
+            </p>
+            <button
+              onClick={() => handleBookAppointment()}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 shadow-lg hover:shadow-xl transition-all"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Book Your First Appointment</span>
+              <ArrowRight className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       ) : (
         <div className="card overflow-hidden p-0">
