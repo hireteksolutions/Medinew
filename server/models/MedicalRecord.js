@@ -28,6 +28,11 @@ const medicalRecordSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  fileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'File',
+    default: null
+  },
   description: {
     type: String,
     trim: true

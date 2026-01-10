@@ -34,6 +34,8 @@ export const APPOINTMENT_STATUSES = {
   CONFIRMED: 'confirmed',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
+  RESCHEDULE_REQUESTED: 'reschedule_requested',
+  RESCHEDULED_BY_ADMIN: 'rescheduled_by_admin',
 } as const;
 
 export type AppointmentStatus = typeof APPOINTMENT_STATUSES[keyof typeof APPOINTMENT_STATUSES];
@@ -41,6 +43,8 @@ export type AppointmentStatus = typeof APPOINTMENT_STATUSES[keyof typeof APPOINT
 export const APPOINTMENT_STATUS_OPTIONS = [
   { value: APPOINTMENT_STATUSES.PENDING, label: 'Pending' },
   { value: APPOINTMENT_STATUSES.CONFIRMED, label: 'Confirmed' },
+  { value: APPOINTMENT_STATUSES.RESCHEDULE_REQUESTED, label: 'Reschedule Requested' },
+  { value: APPOINTMENT_STATUSES.RESCHEDULED_BY_ADMIN, label: 'Rescheduled by Admin' },
   { value: APPOINTMENT_STATUSES.COMPLETED, label: 'Completed' },
   { value: APPOINTMENT_STATUSES.CANCELLED, label: 'Cancelled' },
 ] as const;
@@ -204,6 +208,18 @@ export const getDashboardPath = (role: UserRole): string => {
       return '/';
   }
 };
+
+// Date Format Configuration
+export const DATE_FORMATS = {
+  DISPLAY: 'dd/MM/yyyy', // Display format: DD/MM/YYYY
+  DISPLAY_FULL: 'dd/MM/yyyy', // Full display with day name: DD/MM/YYYY Day
+  DISPLAY_LONG: 'dd MMMM yyyy', // Long format: dd MMMM yyyy
+  API: 'yyyy-MM-dd', // API format: yyyy-MM-dd (for backend communication)
+  TIME_12H: 'h:mm a', // 12-hour time format
+  TIME_24H: 'HH:mm', // 24-hour time format
+} as const;
+
+export type DateFormat = typeof DATE_FORMATS[keyof typeof DATE_FORMATS];
 
 // Re-export validation constants
 export * from './validation';

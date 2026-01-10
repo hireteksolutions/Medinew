@@ -132,6 +132,31 @@ const appointmentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Payment',
     sparse: true
+  },
+  // Rescheduling information
+  reschedulingInfo: {
+    originalDate: Date,
+    originalTimeSlot: {
+      start: String,
+      end: String
+    },
+    rescheduledDate: Date,
+    rescheduledTimeSlot: {
+      start: String,
+      end: String
+    },
+    rescheduledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    rescheduledAt: Date,
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    requestedAt: Date,
+    reason: String,
+    doctorUnavailabilityReason: String
   }
 }, {
   timestamps: true

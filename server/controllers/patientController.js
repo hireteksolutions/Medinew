@@ -159,12 +159,37 @@ export const getMedicalRecords = async (req, res) => {
     // Get total count before pagination
     const total = await MedicalRecord.countDocuments(query);
 
-    const records = await MedicalRecord.find(query)
+    let records = await MedicalRecord.find(query)
       .populate('doctorId', 'firstName lastName specialization')
       .populate('appointmentId')
-      .sort({ uploadedAt: -1 })
+      .populate({
+        path: 'fileId',
+        select: 'originalName fileName fileUrl storageKey size mimeType storageProvider isActive',
+        match: { isActive: true } // Only populate if file is active
+      })
+      .sort({ createdAt: -1 })
       .skip(offset)
-      .limit(limit);
+      .limit(limit)
+      .lean();
+
+    // Map records to include file info in a more accessible format
+    records = records.map(record => {
+      const recordObj = record.toObject ? record.toObject() : record;
+      // Check if fileId is populated (object) and has the expected structure
+      if (recordObj.fileId && typeof recordObj.fileId === 'object' && recordObj.fileId._id) {
+        recordObj.file = {
+          size: recordObj.fileId.size,
+          mimeType: recordObj.fileId.mimeType,
+          originalName: recordObj.fileId.originalName || recordObj.fileId.fileName,
+          fileUrl: recordObj.fileId.fileUrl || recordObj.fileUrl,
+          storageKey: recordObj.fileId.storageKey
+        };
+      } else if (recordObj.fileId) {
+        // If fileId exists but wasn't populated (just ID), keep it as is
+        // The frontend can use the existing fileUrl
+      }
+      return recordObj;
+    });
 
     // Build pagination metadata
     const pagination = buildPaginationMeta(total, limit, offset);
@@ -271,11 +296,21 @@ export const getFavoriteDoctors = async (req, res) => {
     // Apply pagination to array
     const paginatedDoctors = favoriteDoctors.slice(offset, offset + limit);
 
+    // Ensure currentHospitalName and education are always included
+    const doctorsWithFields = paginatedDoctors.map(doc => {
+      const doctorObj = doc.toObject ? doc.toObject() : doc;
+      return {
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || []
+      };
+    });
+
     // Build pagination metadata
     const pagination = buildPaginationMeta(total, limit, offset);
 
     res.json({
-      doctors: paginatedDoctors,
+      doctors: doctorsWithFields,
       pagination
     });
   } catch (error) {
@@ -399,13 +434,73 @@ export const deleteMedicalRecord = async (req, res) => {
       return res.status(403).json({ message: PATIENT_MESSAGES.NOT_AUTHORIZED });
     }
 
+    // Delete associated file from bucket if fileId exists
+    if (record.fileId) {
+      try {
+        const File = (await import('../models/File.js')).default;
+        const fileStorageService = (await import('../services/fileStorageService.js')).default;
+        
+        const file = await File.findById(record.fileId);
+        if (file && file.storageKey && file.isActive) {
+          console.log(`🗑️  Deleting medical record file from bucket: ${file.storageKey}`);
+          
+          try {
+            await fileStorageService.initialize();
+            // Delete file from bucket using the deleteFile method
+            await fileStorageService.deleteFile(file._id.toString(), req.user._id.toString());
+            console.log(`✅ Medical record file deleted from bucket: ${file.storageKey}`);
+          } catch (deleteError) {
+            console.error('❌ Error deleting medical record file from bucket:', deleteError.message);
+            // Try fallback deletion
+            try {
+              await fileStorageService.initialize();
+              if (file.storageProvider === 'aws-s3' || file.storageProvider === 'AWS_S3') {
+                await fileStorageService.deleteFromS3(file.storageKey);
+              } else if (file.storageProvider === 'google-cloud' || file.storageProvider === 'GOOGLE_CLOUD') {
+                await fileStorageService.deleteFromGCS(file.storageKey);
+              } else if (file.storageProvider === 'azure-blob' || file.storageProvider === 'AZURE_BLOB') {
+                await fileStorageService.deleteFromAzure(file.storageKey);
+              }
+              // Soft delete file record
+              file.isActive = false;
+              file.deletedAt = new Date();
+              await file.save();
+              console.log(`✅ Medical record file deleted from bucket (fallback method)`);
+            } catch (fallbackError) {
+              console.error('❌ Fallback deletion also failed:', fallbackError.message);
+              // Continue with record deletion even if file deletion fails
+            }
+          }
+        }
+      } catch (fileError) {
+        console.error('❌ Error processing file deletion:', fileError.message);
+        // Continue with record deletion even if file deletion fails
+      }
+    }
+
     // Soft delete medical record
     record.isDeleted = true;
     record.deletedAt = new Date();
     await record.save();
 
-    res.json({ message: PATIENT_MESSAGES.MEDICAL_RECORD_DELETED_SUCCESSFULLY });
+    // Log medical record deletion
+    await createAuditLog({
+      user: req.user,
+      action: 'delete_medical_record',
+      entityType: 'medical_record',
+      entityId: record._id,
+      method: 'DELETE',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      req
+    });
+
+    res.json({ 
+      message: PATIENT_MESSAGES.MEDICAL_RECORD_DELETED_SUCCESSFULLY || 'Medical record and associated file deleted successfully'
+    });
   } catch (error) {
+    console.error('Error deleting medical record:', error);
     res.status(500).json({ message: error.message });
   }
 };

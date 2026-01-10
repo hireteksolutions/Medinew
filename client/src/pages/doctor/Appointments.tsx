@@ -7,6 +7,7 @@ import DatePickerComponent from '../../components/common/DatePicker';
 import { APPOINTMENT_STATUSES, getAppointmentStatusColor, isActiveAppointment, TOAST_MESSAGES, APPOINTMENT_FILTERS } from '../../constants';
 import Badge from '../../components/common/Badge';
 import Pagination from '../../components/common/Pagination';
+import { getAppointmentBadgeVariant, getPaymentStatusBadgeVariant, toTitleCase } from '../../utils/badgeUtils';
 
 export default function Appointments() {
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -152,7 +153,7 @@ export default function Appointments() {
   const getPaymentStatusBadge = (payment: any) => {
     if (!payment) {
       return (
-        <Badge variant="secondary">
+        <Badge variant="default">
           No Payment
         </Badge>
       );
@@ -161,24 +162,13 @@ export default function Appointments() {
     const status = payment.status;
     const gateway = payment.paymentGateway;
 
-    let statusText = status.charAt(0).toUpperCase() + status.slice(1);
+    let statusText = toTitleCase(status);
     if (gateway === 'offline' && status === 'pending') {
       statusText = 'Pay at Clinic';
-    } else if (status === 'completed') {
-      statusText = 'Completed';
     }
 
-    const statusVariants: { [key: string]: 'success' | 'warning' | 'danger' | 'secondary' | 'info' } = {
-      completed: 'success',
-      pending: 'warning',
-      failed: 'danger',
-      cancelled: 'secondary',
-      refunded: 'warning',
-      processing: 'info',
-    };
-
     return (
-      <Badge variant={statusVariants[status] || 'secondary'}>
+      <Badge variant={getPaymentStatusBadgeVariant(status)}>
         {statusText}
       </Badge>
     );
@@ -373,13 +363,8 @@ export default function Appointments() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={
-                        appointment.status === APPOINTMENT_STATUSES.CONFIRMED ? 'success' :
-                        appointment.status === APPOINTMENT_STATUSES.COMPLETED ? 'info' :
-                        appointment.status === APPOINTMENT_STATUSES.CANCELLED ? 'danger' :
-                        'warning'
-                      }>
-                        {appointment.status}
+                      <Badge variant={getAppointmentBadgeVariant(appointment.status)}>
+                        {toTitleCase(appointment.status)}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -640,13 +625,8 @@ export default function Appointments() {
                       <FileText className="w-5 h-5 text-purple-500 mt-0.5" />
                       <div>
                         <p className="text-xs font-medium text-gray-600 mb-1">Status</p>
-                        <Badge variant={
-                          selectedAppointment.status === APPOINTMENT_STATUSES.CONFIRMED ? 'success' :
-                          selectedAppointment.status === APPOINTMENT_STATUSES.COMPLETED ? 'info' :
-                          selectedAppointment.status === APPOINTMENT_STATUSES.CANCELLED ? 'danger' :
-                          'warning'
-                        }>
-                          {selectedAppointment.status}
+                        <Badge variant={getAppointmentBadgeVariant(selectedAppointment.status)}>
+                          {toTitleCase(selectedAppointment.status)}
                         </Badge>
                       </div>
                     </div>

@@ -8,6 +8,8 @@ import Admin from '../models/Admin.js';
 import { USER_ROLES, APPOINTMENT_STATUSES, PAYMENT_STATUSES, DATE_CONSTANTS, HTTP_STATUS } from '../constants/index.js';
 import { DOCTOR_MESSAGES, ADMIN_MESSAGES, AUTHZ_MESSAGES, PATIENT_MESSAGES, APPOINTMENT_MESSAGES, AUTH_MESSAGES } from '../constants/messages.js';
 import { getPaginationParams, buildPaginationMeta } from '../utils/pagination.js';
+import { createAppointmentNotification } from '../utils/notificationService.js';
+import { createAuditLog } from '../utils/auditLogger.js';
 
 // Helper function to get date ranges
 const getDateRanges = () => {
@@ -313,7 +315,15 @@ export const approveDoctor = async (req, res) => {
     doctor.isApproved = true;
     await doctor.save();
 
-    res.json({ message: DOCTOR_MESSAGES.DOCTOR_APPROVED_SUCCESSFULLY, doctor });
+    const doctorObj = doctor.toObject ? doctor.toObject() : doctor;
+    res.json({ 
+      message: DOCTOR_MESSAGES.DOCTOR_APPROVED_SUCCESSFULLY, 
+      doctor: {
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || []
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -808,26 +818,91 @@ export const updatePatient = async (req, res) => {
     }
 
     // Update user info
-    const { firstName, lastName, email, phone, dateOfBirth, gender, address } = req.body;
-    if (firstName) patient.userId.firstName = firstName;
-    if (lastName) patient.userId.lastName = lastName;
-    if (email) patient.userId.email = email;
-    if (phone) patient.userId.phone = phone;
-    if (dateOfBirth) patient.userId.dateOfBirth = dateOfBirth;
-    if (gender) patient.userId.gender = gender;
-    if (address) patient.userId.address = address;
+    const { 
+      firstName, 
+      lastName, 
+      email, 
+      phone, 
+      dateOfBirth, 
+      gender, 
+      address,
+      profileImage 
+    } = req.body;
+    
+    if (firstName !== undefined) patient.userId.firstName = firstName;
+    if (lastName !== undefined) patient.userId.lastName = lastName;
+    if (email !== undefined) patient.userId.email = email;
+    if (phone !== undefined) patient.userId.phone = phone;
+    if (dateOfBirth !== undefined) patient.userId.dateOfBirth = dateOfBirth;
+    if (gender !== undefined) patient.userId.gender = gender;
+    if (address !== undefined) {
+      if (typeof address === 'object') {
+        patient.userId.address = { ...patient.userId.address, ...address };
+      } else {
+        patient.userId.address = address;
+      }
+    }
+    if (profileImage !== undefined) patient.userId.profileImage = profileImage;
     
     await patient.userId.save();
 
     // Update patient-specific fields
-    const { bloodGroup, allergies, medicalHistory, emergencyContact, insuranceInfo } = req.body;
+    const { 
+      bloodGroup, 
+      height, 
+      weight, 
+      allergies, 
+      medicalHistory, 
+      currentMedications,
+      chronicConditions,
+      previousSurgeries,
+      emergencyContact, 
+      insuranceInfo 
+    } = req.body;
+    
     if (bloodGroup !== undefined) patient.bloodGroup = bloodGroup;
-    if (allergies !== undefined) patient.allergies = allergies;
+    if (height !== undefined) {
+      patient.height = height;
+      // Recalculate BMI if both height and weight are present
+      if (height > 0 && patient.weight > 0) {
+        const heightInMeters = height / 100;
+        patient.bmi = parseFloat((patient.weight / (heightInMeters * heightInMeters)).toFixed(2));
+      }
+    }
+    if (weight !== undefined) {
+      patient.weight = weight;
+      // Recalculate BMI if both height and weight are present
+      if (patient.height > 0 && weight > 0) {
+        const heightInMeters = patient.height / 100;
+        patient.bmi = parseFloat((weight / (heightInMeters * heightInMeters)).toFixed(2));
+      }
+    }
+    if (allergies !== undefined) {
+      patient.allergies = Array.isArray(allergies) ? allergies : allergies.split(',').map(a => a.trim());
+    }
     if (medicalHistory !== undefined) patient.medicalHistory = medicalHistory;
-    if (emergencyContact !== undefined) patient.emergencyContact = emergencyContact;
-    if (insuranceInfo !== undefined) patient.insuranceInfo = insuranceInfo;
+    if (currentMedications !== undefined) patient.currentMedications = currentMedications;
+    if (chronicConditions !== undefined) patient.chronicConditions = chronicConditions;
+    if (previousSurgeries !== undefined) patient.previousSurgeries = previousSurgeries;
+    if (emergencyContact !== undefined) {
+      patient.emergencyContact = typeof emergencyContact === 'object' ? { ...patient.emergencyContact, ...emergencyContact } : emergencyContact;
+    }
+    if (insuranceInfo !== undefined) {
+      patient.insuranceInfo = typeof insuranceInfo === 'object' ? { ...patient.insuranceInfo, ...insuranceInfo } : insuranceInfo;
+    }
     
     await patient.save();
+
+    // Create audit log
+    await createAuditLog({
+      userId: req.user.id,
+      action: 'UPDATE_PATIENT_PROFILE',
+      resourceType: 'Patient',
+      resourceId: patient._id,
+      changes: req.body,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    });
 
     const updatedPatient = await Patient.findById(req.params.id).populate('userId');
     res.json({ message: ADMIN_MESSAGES.PATIENT_UPDATED_SUCCESSFULLY, patient: updatedPatient });
@@ -942,8 +1017,13 @@ export const getDoctorById = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10);
 
+    const doctorObj = doctor.toObject ? doctor.toObject() : doctor;
     res.json({ 
-      doctor, 
+      doctor: {
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || []
+      }, 
       stats: {
         totalAppointments,
         totalPatients: totalPatients.length,
@@ -962,36 +1042,89 @@ export const getDoctorById = async (req, res) => {
 export const updateDoctor = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id).populate('userId');
-    if (!doctor) {
+    if (!doctor || doctor.isDeleted) {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_NOT_FOUND });
     }
 
     // Update user info
-    const { firstName, lastName, email, phone, dateOfBirth, gender, address } = req.body;
-    if (firstName) doctor.userId.firstName = firstName;
-    if (lastName) doctor.userId.lastName = lastName;
-    if (email) doctor.userId.email = email;
-    if (phone) doctor.userId.phone = phone;
-    if (dateOfBirth) doctor.userId.dateOfBirth = dateOfBirth;
-    if (gender) doctor.userId.gender = gender;
-    if (address) doctor.userId.address = address;
+    const { 
+      firstName, 
+      lastName, 
+      email, 
+      phone, 
+      dateOfBirth, 
+      gender, 
+      address,
+      profileImage 
+    } = req.body;
+    
+    if (firstName !== undefined) doctor.userId.firstName = firstName;
+    if (lastName !== undefined) doctor.userId.lastName = lastName;
+    if (email !== undefined) doctor.userId.email = email;
+    if (phone !== undefined) doctor.userId.phone = phone;
+    if (dateOfBirth !== undefined) doctor.userId.dateOfBirth = dateOfBirth;
+    if (gender !== undefined) doctor.userId.gender = gender;
+    if (address !== undefined) {
+      if (typeof address === 'object') {
+        doctor.userId.address = { ...doctor.userId.address, ...address };
+      } else {
+        doctor.userId.address = address;
+      }
+    }
+    if (profileImage !== undefined) doctor.userId.profileImage = profileImage;
     
     await doctor.userId.save();
 
     // Update doctor-specific fields
-    const { specialization, licenseNumber, experience, consultationFee, biography, languages, education } = req.body;
-    if (specialization) doctor.specialization = specialization;
-    if (licenseNumber) doctor.licenseNumber = licenseNumber;
+    const { 
+      specialization, 
+      licenseNumber, 
+      experience, 
+      consultationFee, 
+      biography, 
+      languages, 
+      education, 
+      currentHospitalName,
+      consultationType,
+      consultationDuration,
+      certifications
+    } = req.body;
+    
+    if (specialization !== undefined) doctor.specialization = specialization;
+    if (licenseNumber !== undefined) doctor.licenseNumber = licenseNumber;
     if (experience !== undefined) doctor.experience = experience;
     if (consultationFee !== undefined) doctor.consultationFee = consultationFee;
     if (biography !== undefined) doctor.biography = biography;
-    if (languages !== undefined) doctor.languages = languages;
+    if (languages !== undefined) doctor.languages = Array.isArray(languages) ? languages : languages.split(',').map(l => l.trim());
     if (education !== undefined) doctor.education = education;
+    if (currentHospitalName !== undefined) doctor.currentHospitalName = currentHospitalName;
+    if (consultationType !== undefined) doctor.consultationType = Array.isArray(consultationType) ? consultationType : [consultationType];
+    if (consultationDuration !== undefined) doctor.consultationDuration = consultationDuration;
+    if (certifications !== undefined) doctor.certifications = certifications;
     
     await doctor.save();
 
+    // Create audit log
+    await createAuditLog({
+      userId: req.user.id,
+      action: 'UPDATE_DOCTOR_PROFILE',
+      resourceType: 'Doctor',
+      resourceId: doctor._id,
+      changes: req.body,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    });
+
     const updatedDoctor = await Doctor.findById(req.params.id).populate('userId');
-    res.json({ message: ADMIN_MESSAGES.DOCTOR_UPDATED_SUCCESSFULLY, doctor: updatedDoctor });
+    const doctorObj = updatedDoctor.toObject ? updatedDoctor.toObject() : updatedDoctor;
+    res.json({ 
+      message: ADMIN_MESSAGES.DOCTOR_UPDATED_SUCCESSFULLY, 
+      doctor: {
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || []
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -1103,6 +1236,129 @@ export const cancelAppointment = async (req, res) => {
     await appointment.save();
 
     res.json({ message: ADMIN_MESSAGES.APPOINTMENT_CANCELLED_SUCCESSFULLY, appointment });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Reschedule appointment by admin
+// @route   PUT /api/admin/appointments/:id/reschedule
+// @access  Private/Admin
+export const rescheduleAppointment = async (req, res) => {
+  try {
+    const { appointmentDate, timeSlot, reason } = req.body;
+
+    if (!appointmentDate || !timeSlot || !timeSlot.start || !timeSlot.end) {
+      return res.status(400).json({ message: 'New appointment date and time slot are required' });
+    }
+
+    const appointment = await Appointment.findById(req.params.id)
+      .populate('patientId', 'firstName lastName email')
+      .populate('doctorId', 'firstName lastName');
+    
+    if (!appointment) {
+      return res.status(404).json({ message: APPOINTMENT_MESSAGES.APPOINTMENT_NOT_FOUND });
+    }
+
+    // Validate new date is in the future
+    const newDate = new Date(appointmentDate);
+    const now = new Date();
+    if (newDate < now) {
+      return res.status(400).json({ message: 'Cannot reschedule to a past date' });
+    }
+
+    // Check if new slot is available
+    const newDateStart = new Date(newDate);
+    newDateStart.setHours(0, 0, 0, 0);
+    const newDateEnd = new Date(newDate);
+    newDateEnd.setHours(23, 59, 59, 999);
+
+    const conflictingAppointment = await Appointment.findOne({
+      doctorId: appointment.doctorId,
+      appointmentDate: {
+        $gte: newDateStart,
+        $lte: newDateEnd
+      },
+      'timeSlot.start': timeSlot.start,
+      'timeSlot.end': timeSlot.end,
+      status: { $in: [APPOINTMENT_STATUSES.PENDING, APPOINTMENT_STATUSES.CONFIRMED, APPOINTMENT_STATUSES.RESCHEDULE_REQUESTED] },
+      _id: { $ne: appointment._id }
+    });
+
+    if (conflictingAppointment) {
+      return res.status(400).json({ message: 'Time slot is already booked' });
+    }
+
+    // Store original appointment details
+    const originalDate = appointment.appointmentDate;
+    const originalTimeSlot = appointment.timeSlot;
+
+    // Update appointment
+    appointment.appointmentDate = newDate;
+    appointment.timeSlot = timeSlot;
+    appointment.status = APPOINTMENT_STATUSES.RESCHEDULED_BY_ADMIN;
+
+    // Update rescheduling info
+    if (!appointment.reschedulingInfo) {
+      appointment.reschedulingInfo = {};
+    }
+    appointment.reschedulingInfo.originalDate = originalDate;
+    appointment.reschedulingInfo.originalTimeSlot = originalTimeSlot;
+    appointment.reschedulingInfo.rescheduledDate = newDate;
+    appointment.reschedulingInfo.rescheduledTimeSlot = timeSlot;
+    appointment.reschedulingInfo.rescheduledBy = req.user._id;
+    appointment.reschedulingInfo.rescheduledAt = new Date();
+    appointment.reschedulingInfo.reason = reason || 'Rescheduled by admin';
+
+    await appointment.save();
+
+    // Notify patient
+    await createAppointmentNotification(appointment.patientId._id, {
+      appointmentType: 'appointment_rescheduled',
+      title: 'Appointment Rescheduled',
+      message: `Your appointment with Dr. ${appointment.doctorId.firstName} ${appointment.doctorId.lastName} has been rescheduled to ${newDate.toLocaleDateString()} at ${timeSlot.start} - ${timeSlot.end}. ${reason ? `Reason: ${reason}` : ''}`,
+      priority: 'high',
+      appointmentId: appointment._id,
+      actionUrl: `/appointments/${appointment._id}`,
+      metadata: {
+        originalDate: originalDate,
+        originalTimeSlot: originalTimeSlot,
+        newDate: newDate,
+        newTimeSlot: timeSlot,
+        reason: reason
+      }
+    });
+
+    // Log the action
+    await createAuditLog({
+      user: req.user,
+      action: 'reschedule_appointment',
+      entityType: 'appointment',
+      entityId: appointment._id,
+      method: 'PUT',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: {
+        appointmentId: appointment._id,
+        originalDate: originalDate,
+        originalTimeSlot: originalTimeSlot,
+        newDate: newDate,
+        newTimeSlot: timeSlot,
+        reason: reason,
+        patientId: appointment.patientId._id
+      },
+      req
+    });
+
+    res.json({
+      message: ADMIN_MESSAGES.APPOINTMENT_RESCHEDULED_SUCCESSFULLY || 'Appointment rescheduled successfully',
+      appointment: {
+        ...appointment.toObject(),
+        originalDate: originalDate,
+        originalTimeSlot: originalTimeSlot
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

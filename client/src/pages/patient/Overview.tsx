@@ -6,6 +6,7 @@ import { useLoader } from '../../context/LoaderContext';
 import { format } from 'date-fns';
 import { APPOINTMENT_STATUSES, getAppointmentStatusColor, DASHBOARD_ROUTES } from '../../constants';
 import Badge from '../../components/common/Badge';
+import { getAppointmentBadgeVariant, toTitleCase } from '../../utils/badgeUtils';
 
 export default function Overview() {
   const { showLoader, hideLoader } = useLoader();
@@ -196,12 +197,8 @@ export default function Overview() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={
-                        appointment.status === APPOINTMENT_STATUSES.CONFIRMED ? 'success' :
-                        appointment.status === APPOINTMENT_STATUSES.PENDING ? 'warning' :
-                        'danger'
-                      }>
-                        {appointment.status}
+                      <Badge variant={getAppointmentBadgeVariant(appointment.status)}>
+                        {toTitleCase(appointment.status)}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

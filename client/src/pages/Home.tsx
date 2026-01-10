@@ -14,7 +14,8 @@ import {
   Activity,
   Star,
   Quote,
-  Sparkles
+  Sparkles,
+  MapPin
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { doctorService } from '../services/api';
@@ -504,7 +505,22 @@ export default function Home() {
                         <h3 className="font-bold text-lg text-gray-900 mb-1 group-hover:text-primary-600 transition-colors">
                           Dr. {doctor.userId.firstName} {doctor.userId.lastName}
                         </h3>
-                        <p className="text-primary-600 font-medium text-sm mb-2">{doctor.specialization}</p>
+                        <p className="text-primary-600 font-medium text-sm mb-1">{doctor.specialization}</p>
+                        {doctor.currentHospitalName && (
+                          <p className="text-gray-600 text-xs mb-1 flex items-center">
+                            <MapPin className="w-3 h-3 mr-1" />
+                            <span className="truncate">{doctor.currentHospitalName}</span>
+                          </p>
+                        )}
+                        {doctor.education && doctor.education.length > 0 && doctor.education[0] && (
+                          <p className="text-gray-600 text-xs mb-2 flex items-center">
+                            <Award className="w-3 h-3 mr-1" />
+                            <span className="truncate">
+                              {doctor.education[0].degree}
+                              {doctor.education[0].institution && ` - ${doctor.education[0].institution}`}
+                            </span>
+                          </p>
+                        )}
                         <div className="flex items-center">
                           <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                           <span className="ml-1 font-semibold text-gray-900">{doctor.rating.toFixed(1)}</span>

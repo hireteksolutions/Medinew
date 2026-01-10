@@ -3,7 +3,7 @@ import { doctorDashboardService, specializationService, authService, fileService
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { FORM_LIMITS, TOAST_MESSAGES } from '../../constants';
-import { Camera, X, Upload, User } from 'lucide-react';
+import { Camera, X, Upload, User, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLoader } from '../../context/LoaderContext';
 
@@ -16,6 +16,7 @@ export default function Profile() {
   const [loadingSpecializations, setLoadingSpecializations] = useState(true);
   const [profileImage, setProfileImage] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [educationEntries, setEducationEntries] = useState<any[]>([{ degree: '', institution: '', year: '' }]);
 
   const { register, handleSubmit, setValue, watch } = useForm();
   
@@ -56,6 +57,16 @@ export default function Profile() {
       setValue('biography', profileRes.data.biography);
       setValue('consultationDuration', profileRes.data.consultationDuration);
       setValue('consultationType', profileRes.data.consultationType || ['both']);
+      setValue('currentHospitalName', profileRes.data.currentHospitalName || '');
+      const educationData = profileRes.data.education || [];
+      // Ensure at least one empty education entry if none exist
+      const entries = educationData.length > 0 ? educationData : [{ degree: '', institution: '', year: '' }];
+      setEducationEntries(entries);
+      entries.forEach((edu: any, index: number) => {
+        setValue(`education.${index}.degree`, edu.degree || '');
+        setValue(`education.${index}.institution`, edu.institution || '');
+        setValue(`education.${index}.year`, edu.year || '');
+      });
       
       // Set address fields
       if (userData?.address) {
@@ -83,9 +94,10 @@ export default function Profile() {
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size should be less than 5MB');
+    // Validate file size (max 10MB - configurable, matches backend)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast.error(`Image size should be less than ${maxSize / (1024 * 1024)}MB`);
       return;
     }
 
@@ -100,7 +112,9 @@ export default function Profile() {
         isPublic: 'true'
       });
 
-      const imageUrl = uploadResponse.data.file.fileUrl;
+      // Use signedUrl if available (for private buckets), otherwise use fileUrl (for public buckets)
+      const fileData = uploadResponse.data.file;
+      const imageUrl = fileData.signedUrl || fileData.fileUrl || fileData.publicUrl;
 
       // Update profile with new image URL
       await authService.updateProfile({ profileImage: imageUrl });
@@ -121,10 +135,47 @@ export default function Profile() {
     }
   };
 
+  const addEducationEntry = () => {
+    const newEntry = { degree: '', institution: '', year: '' };
+    const updatedEntries = [...educationEntries, newEntry];
+    setEducationEntries(updatedEntries);
+    const index = updatedEntries.length - 1;
+    setValue(`education.${index}.degree`, '');
+    setValue(`education.${index}.institution`, '');
+    setValue(`education.${index}.year`, '');
+  };
+
+  const removeEducationEntry = (index: number) => {
+    const updatedEntries = educationEntries.filter((_, i) => i !== index);
+    setEducationEntries(updatedEntries);
+    // Clear the form values for this entry
+    setValue(`education.${index}.degree`, undefined);
+    setValue(`education.${index}.institution`, undefined);
+    setValue(`education.${index}.year`, undefined);
+  };
+
+  const updateEducationEntry = (index: number, field: string, value: any) => {
+    const updatedEntries = [...educationEntries];
+    updatedEntries[index] = { ...updatedEntries[index], [field]: value };
+    setEducationEntries(updatedEntries);
+    setValue(`education.${index}.${field}`, value);
+  };
+
   const onSubmit = async (data: any) => {
     try {
       // Separate address and consultationType from doctor profile data
       const { address, consultationType, ...doctorData } = data;
+      
+      // Process education entries - filter out empty entries
+      const educationData = educationEntries
+        .map((edu, index) => ({
+          degree: data[`education.${index}.degree`] || edu.degree,
+          institution: data[`education.${index}.institution`] || edu.institution,
+          year: data[`education.${index}.year`] ? parseInt(data[`education.${index}.year`]) : edu.year
+        }))
+        .filter(edu => edu.degree || edu.institution);
+      
+      doctorData.education = educationData;
       
       // Prepare consultationType array
       let consultationTypeArray = ['both'];
@@ -326,6 +377,75 @@ export default function Profile() {
                 }}
               />
               <p className="mt-1 text-xs text-gray-500">Range: {FORM_LIMITS.CONSULTATION_DURATION_MIN}-{FORM_LIMITS.CONSULTATION_DURATION_MAX} minutes (max {FORM_LIMITS.CONSULTATION_DURATION_MAX_DIGITS} digits)</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Current Hospital Name</label>
+              <input
+                {...register('currentHospitalName')}
+                type="text"
+                className="input-field"
+                placeholder="Enter current hospital/clinic name"
+              />
+            </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Education</label>
+            <div className="space-y-3">
+              {educationEntries.map((edu, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 border border-gray-200 rounded-lg">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Degree</label>
+                    <input
+                      {...register(`education.${index}.degree`)}
+                      type="text"
+                      className="input-field"
+                      placeholder="e.g., MBBS, MD"
+                      value={edu.degree || ''}
+                      onChange={(e) => updateEducationEntry(index, 'degree', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Institution</label>
+                    <input
+                      {...register(`education.${index}.institution`)}
+                      type="text"
+                      className="input-field"
+                      placeholder="University/College name"
+                      value={edu.institution || ''}
+                      onChange={(e) => updateEducationEntry(index, 'institution', e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Year</label>
+                      <input
+                        {...register(`education.${index}.year`)}
+                        type="number"
+                        className="input-field"
+                        placeholder="Year"
+                        value={edu.year || ''}
+                        onChange={(e) => updateEducationEntry(index, 'year', e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeEducationEntry(index)}
+                      disabled={educationEntries.length === 1}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addEducationEntry}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Education Entry
+              </button>
             </div>
           </div>
           <div className="mt-4">

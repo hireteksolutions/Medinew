@@ -96,8 +96,11 @@ export const getAllDoctors = async (req, res) => {
         }
       }
 
+      const doctorObj = doc.toObject();
       return {
-        ...doc.toObject(),
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || [],
         distance: distance !== null ? parseFloat(distance.toFixed(2)) : null,
         distanceFormatted: distance !== null ? formatDistance(distance) : null
       };
@@ -216,7 +219,16 @@ export const getFeaturedDoctors = async (req, res) => {
       .sort({ rating: -1, totalReviews: -1 })
       .limit(6);
 
-    res.json(doctors);
+    const doctorsWithFields = doctors.map(doc => {
+      const doctorObj = doc.toObject ? doc.toObject() : doc;
+      return {
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || []
+      };
+    });
+
+    res.json(doctorsWithFields);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -262,7 +274,16 @@ export const searchDoctors = async (req, res) => {
       });
     }
 
-    res.json(filteredDoctors);
+    const doctorsWithFields = filteredDoctors.map(doc => {
+      const doctorObj = doc.toObject ? doc.toObject() : doc;
+      return {
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || []
+      };
+    });
+
+    res.json(doctorsWithFields);
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: error.message });
   }
@@ -288,8 +309,13 @@ export const getDoctorById = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10);
 
+    const doctorObj = doctor.toObject ? doctor.toObject() : doctor;
     res.json({
-      doctor,
+      doctor: {
+        ...doctorObj,
+        currentHospitalName: doctorObj.currentHospitalName || null,
+        education: doctorObj.education || []
+      },
       reviews
     });
   } catch (error) {

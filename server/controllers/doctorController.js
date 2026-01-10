@@ -7,10 +7,11 @@ import Review from '../models/Review.js';
 import Message from '../models/Message.js';
 import Payment from '../models/Payment.js';
 import AvailabilitySchedule from '../models/AvailabilitySchedule.js';
-import { APPOINTMENT_STATUSES, MESSAGE_STATUSES, DAY_OF_WEEK_VALUES, PAYMENT_STATUSES, HTTP_STATUS } from '../constants/index.js';
+import { APPOINTMENT_STATUSES, MESSAGE_STATUSES, DAY_OF_WEEK_VALUES, PAYMENT_STATUSES, HTTP_STATUS, USER_ROLES } from '../constants/index.js';
 import { DOCTOR_MESSAGES, APPOINTMENT_MESSAGES, AUTH_MESSAGES } from '../constants/messages.js';
 import { getPaginationParams, buildPaginationMeta, applyPagination } from '../utils/pagination.js';
 import { createAuditLog } from '../utils/auditLogger.js';
+import { createAppointmentNotification, createBulkNotifications } from '../utils/notificationService.js';
 
 // ============================================
 // PROFILE MANAGEMENT
@@ -28,7 +29,12 @@ export const getProfile = async (req, res) => {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_PROFILE_NOT_FOUND });
     }
     
-    res.json(doctor);
+    const doctorObj = doctor.toObject ? doctor.toObject() : doctor;
+    res.json({
+      ...doctorObj,
+      currentHospitalName: doctorObj.currentHospitalName || null,
+      education: doctorObj.education || []
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -43,6 +49,7 @@ export const updateProfile = async (req, res) => {
       specialization,
       licenseNumber,
       education,
+      currentHospitalName,
       experience,
       consultationFee,
       languages,
@@ -72,6 +79,7 @@ export const updateProfile = async (req, res) => {
       doctor.licenseNumber = licenseNumber;
     }
     if (education) doctor.education = education;
+    if (currentHospitalName !== undefined) doctor.currentHospitalName = currentHospitalName;
     if (experience !== undefined) doctor.experience = experience;
     if (consultationFee !== undefined) doctor.consultationFee = consultationFee;
     if (languages) doctor.languages = languages;
@@ -127,7 +135,7 @@ export const getSchedule = async (req, res) => {
     const { startDate, endDate } = req.query;
     const userId = req.user._id;
 
-    const doctor = await Doctor.findOne({ userId }).select('availability blockedDates consultationDuration');
+    const doctor = await Doctor.findOne({ userId }).select('availability blockedDates blockedTimeSlots consultationDuration');
     if (!doctor) {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_PROFILE_NOT_FOUND });
     }
@@ -149,6 +157,7 @@ export const getSchedule = async (req, res) => {
       data: {
         weeklySchedule: doctor.availability || [],
         blockedDates: doctor.blockedDates || [],
+        blockedTimeSlots: doctor.blockedTimeSlots || [],
         consultationDuration: doctor.consultationDuration,
         dateSpecificSchedules: dateSpecificSchedules
       }
@@ -234,16 +243,6 @@ export const updateSchedule = async (req, res) => {
       doctor.availability = availability;
     }
     if (blockedDates !== undefined) {
-      // Validate dates are in the future
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      const invalidDates = blockedDates.filter(date => new Date(date) < now);
-      if (invalidDates.length > 0) {
-        return res.status(400).json({ 
-          message: 'Cannot block past dates',
-          invalidDates 
-        });
-      }
       doctor.blockedDates = blockedDates.map(date => new Date(date));
     }
 
@@ -277,18 +276,8 @@ export const blockDates = async (req, res) => {
       return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_PROFILE_NOT_FOUND });
     }
 
-    // Validate dates are in the future
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    // Prepare date objects
     const dateObjects = dates.map(date => new Date(date));
-    const invalidDates = dateObjects.filter(date => date < now);
-    
-    if (invalidDates.length > 0) {
-      return res.status(400).json({ 
-        message: 'Cannot block past dates',
-        invalidDates: invalidDates.map(d => d.toISOString().split('T')[0])
-      });
-    }
 
     // Check for existing appointments on these dates
     const appointmentQueries = dateObjects.map(date => {
@@ -308,16 +297,7 @@ export const blockDates = async (req, res) => {
 
     const existingAppointments = await Appointment.find({
       $or: appointmentQueries
-    });
-
-    if (existingAppointments.length > 0) {
-      return res.status(400).json({
-        message: 'Cannot block dates with existing appointments',
-        conflictingDates: [...new Set(existingAppointments.map(apt => 
-          apt.appointmentDate.toISOString().split('T')[0]
-        ))]
-      });
-    }
+    }).populate('patientId', 'firstName lastName');
 
     // Add dates to blockedDates (avoid duplicates)
     const existingBlocked = doctor.blockedDates.map(d => d.toISOString().split('T')[0]);
@@ -328,6 +308,78 @@ export const blockDates = async (req, res) => {
     doctor.blockedDates = [...doctor.blockedDates, ...newDates];
     await doctor.save();
 
+    // If there are existing appointments, notify admin
+    if (existingAppointments.length > 0) {
+      // Get all admin users
+      const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true });
+      
+      // Create notifications for all admins
+      const notifications = admins.map(admin => ({
+        userId: admin._id,
+        type: 'doctor_unavailable',
+        title: 'Doctor Unavailability - Action Required',
+        message: `Dr. ${req.user.firstName} ${req.user.lastName} has marked ${existingAppointments.length} appointment(s) as unavailable. Please reschedule these appointments.`,
+        priority: 'urgent',
+        relatedEntityType: 'appointment',
+        actionUrl: `/admin/appointments?doctorId=${req.user._id}&status=pending`,
+        metadata: {
+          doctorId: req.user._id,
+          doctorName: `${req.user.firstName} ${req.user.lastName}`,
+          appointmentIds: existingAppointments.map(apt => apt._id.toString()),
+          blockedDates: dates,
+          reason: reason || 'No reason provided',
+          appointmentCount: existingAppointments.length
+        }
+      }));
+
+      await createBulkNotifications(notifications);
+
+      // Update appointments to track unavailability
+      for (const appointment of existingAppointments) {
+        if (!appointment.reschedulingInfo) {
+          appointment.reschedulingInfo = {};
+        }
+        appointment.reschedulingInfo.doctorUnavailabilityReason = reason || 'Doctor marked time as unavailable';
+        appointment.reschedulingInfo.originalDate = appointment.appointmentDate;
+        appointment.reschedulingInfo.originalTimeSlot = appointment.timeSlot;
+        await appointment.save();
+      }
+
+      // Log the action
+      await createAuditLog({
+        user: req.user,
+        action: 'mark_unavailable',
+        entityType: 'appointment',
+        method: 'POST',
+        endpoint: req.originalUrl,
+        status: 'success',
+        statusCode: HTTP_STATUS.OK,
+        metadata: {
+          blockedDates: dates,
+          affectedAppointments: existingAppointments.length,
+          reason: reason
+        },
+        req
+      });
+
+      return res.json({
+        success: true,
+        message: `${newDates.length} date(s) blocked. ${existingAppointments.length} appointment(s) require rescheduling. Admin has been notified.`,
+        data: {
+          blockedDates: doctor.blockedDates,
+          newlyBlocked: newDates.map(d => d.toISOString().split('T')[0]),
+          appointmentsRequiringRescheduling: existingAppointments.map(apt => ({
+            id: apt._id,
+            appointmentNumber: apt.appointmentNumber,
+            patientName: `${apt.patientId.firstName} ${apt.patientId.lastName}`,
+            date: apt.appointmentDate,
+            timeSlot: apt.timeSlot
+          }))
+        }
+      });
+    }
+
+    // No appointments affected, just confirm blocking
     res.json({
       success: true,
       message: `${newDates.length} date(s) blocked successfully`,
@@ -338,6 +390,358 @@ export const blockDates = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Mark specific time slot as unavailable and notify admin
+// @route   POST /api/doctor/schedule/mark-unavailable
+// @access  Private/Doctor
+export const markTimeSlotUnavailable = async (req, res) => {
+  try {
+    const { appointmentDate, timeSlot, reason } = req.body;
+
+    if (!appointmentDate || !timeSlot || !timeSlot.start || !timeSlot.end) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Appointment date and time slot are required' 
+      });
+    }
+
+    const doctor = await Doctor.findOne({ userId: req.user._id });
+    if (!doctor) {
+      return res.status(404).json({ message: DOCTOR_MESSAGES.DOCTOR_PROFILE_NOT_FOUND });
+    }
+
+    // Validate date format
+    const selectedDate = new Date(appointmentDate);
+    if (isNaN(selectedDate.getTime())) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid date format' 
+      });
+    }
+
+    // Normalize date to start of day for comparison
+    const normalizedDate = new Date(selectedDate);
+    normalizedDate.setHours(0, 0, 0, 0);
+    const dateStr = normalizedDate.toISOString().split('T')[0];
+
+    // Validate time format (HH:MM)
+    const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(timeSlot.start) || !timeRegex.test(timeSlot.end)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid time format. Use HH:MM format (e.g., 09:00, 14:30)' 
+      });
+    }
+
+    // Check if the slot time has passed for today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (dateStr === todayStr) {
+      // It's today - check if the slot time has passed
+      const currentTime = new Date();
+      const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+      
+      const [slotHours, slotMins] = timeSlot.start.split(':').map(Number);
+      const slotMinutes = slotHours * 60 + slotMins;
+      
+      if (slotMinutes <= currentMinutes) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Cannot block past time slots. Please select a future time slot.' 
+        });
+      }
+    } else if (normalizedDate < today) {
+      // It's a past date
+      return res.status(400).json({ 
+        success: false,
+        message: 'Cannot block slots for past dates. Please select a current or future date.' 
+      });
+    }
+
+    // Check if this exact time slot is already blocked
+    const existingBlocked = (doctor.blockedTimeSlots || []).find(blocked => {
+      const blockedDateStr = new Date(blocked.date).toISOString().split('T')[0];
+      return blockedDateStr === dateStr && 
+             blocked.timeSlot.start === timeSlot.start && 
+             blocked.timeSlot.end === timeSlot.end;
+    });
+
+    if (existingBlocked) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'This time slot is already marked as unavailable' 
+      });
+    }
+
+    // Add blocked time slot to doctor's blockedTimeSlots array
+    if (!doctor.blockedTimeSlots) {
+      doctor.blockedTimeSlots = [];
+    }
+    doctor.blockedTimeSlots.push({
+      date: normalizedDate,
+      timeSlot: {
+        start: timeSlot.start,
+        end: timeSlot.end
+      },
+      reason: reason || 'Doctor marked time slot as unavailable',
+      blockedAt: new Date()
+    });
+    await doctor.save();
+
+    // Find appointments at this specific time slot
+    const appointmentDateStart = new Date(normalizedDate);
+    appointmentDateStart.setHours(0, 0, 0, 0);
+    const appointmentDateEnd = new Date(normalizedDate);
+    appointmentDateEnd.setHours(23, 59, 59, 999);
+
+    const existingAppointments = await Appointment.find({
+      doctorId: req.user._id,
+      appointmentDate: {
+        $gte: appointmentDateStart,
+        $lte: appointmentDateEnd
+      },
+      'timeSlot.start': timeSlot.start,
+      'timeSlot.end': timeSlot.end,
+      status: { $in: [APPOINTMENT_STATUSES.PENDING, APPOINTMENT_STATUSES.CONFIRMED] }
+    }).populate('patientId', 'firstName lastName email phone');
+
+    // Get all admin users
+    const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true });
+    
+    if (existingAppointments.length > 0) {
+      // Create notifications for all admins
+      const notifications = admins.map(admin => ({
+        userId: admin._id,
+        type: 'doctor_unavailable',
+        title: 'Doctor Time Slot Unavailable - Action Required',
+        message: `Dr. ${req.user.firstName} ${req.user.lastName} has marked a time slot (${timeSlot.start} - ${timeSlot.end}) on ${selectedDate.toLocaleDateString()} as unavailable. ${existingAppointments.length} appointment(s) require rescheduling. ${reason ? `Reason: ${reason}` : ''}`,
+        priority: 'urgent',
+        relatedEntityType: 'appointment',
+        actionUrl: `/admin/appointments?doctorId=${req.user._id}&status=pending`,
+        metadata: {
+          doctorId: req.user._id,
+          doctorName: `${req.user.firstName} ${req.user.lastName}`,
+          appointmentIds: existingAppointments.map(apt => apt._id.toString()),
+          appointmentDate: normalizedDate,
+          timeSlot: timeSlot,
+          reason: reason || 'Doctor marked time slot as unavailable',
+          appointmentCount: existingAppointments.length
+        }
+      }));
+
+      await createBulkNotifications(notifications);
+
+      // Update appointments to track unavailability and mark for rescheduling
+      for (const appointment of existingAppointments) {
+        if (!appointment.reschedulingInfo) {
+          appointment.reschedulingInfo = {};
+        }
+        appointment.reschedulingInfo.doctorUnavailabilityReason = reason || 'Doctor marked time slot as unavailable';
+        appointment.reschedulingInfo.originalDate = appointment.appointmentDate;
+        appointment.reschedulingInfo.originalTimeSlot = appointment.timeSlot;
+        appointment.reschedulingInfo.requestedAt = new Date();
+        appointment.reschedulingInfo.requestedBy = req.user._id;
+        
+        // Mark appointment status as requiring rescheduling (if not already completed/cancelled)
+        if (appointment.status === APPOINTMENT_STATUSES.PENDING || 
+            appointment.status === APPOINTMENT_STATUSES.CONFIRMED) {
+          appointment.status = APPOINTMENT_STATUSES.RESCHEDULE_REQUESTED;
+        }
+        
+        await appointment.save();
+      }
+
+      // Log the action
+      await createAuditLog({
+        user: req.user,
+        action: 'mark_time_slot_unavailable',
+        entityType: 'appointment',
+        method: 'POST',
+        endpoint: req.originalUrl,
+        status: 'success',
+        statusCode: HTTP_STATUS.OK,
+        metadata: {
+          appointmentDate: normalizedDate,
+          timeSlot: timeSlot,
+          affectedAppointments: existingAppointments.length,
+          reason: reason
+        },
+        req
+      });
+
+      return res.json({
+        success: true,
+        message: `Time slot marked as unavailable. ${existingAppointments.length} appointment(s) require rescheduling. Admin has been notified.`,
+        data: {
+          appointmentDate: normalizedDate,
+          timeSlot: timeSlot,
+          appointmentsRequiringRescheduling: existingAppointments.map(apt => ({
+            id: apt._id,
+            appointmentNumber: apt.appointmentNumber,
+            patientName: `${apt.patientId.firstName} ${apt.patientId.lastName}`,
+            date: apt.appointmentDate,
+            timeSlot: apt.timeSlot
+          }))
+        }
+      });
+    } else {
+      // No appointments affected, but still log the action
+      await createAuditLog({
+        user: req.user,
+        action: 'mark_time_slot_unavailable',
+        entityType: 'doctor',
+        entityId: doctor._id,
+        method: 'POST',
+        endpoint: req.originalUrl,
+        status: 'success',
+        statusCode: HTTP_STATUS.OK,
+        metadata: {
+          appointmentDate: normalizedDate,
+          timeSlot: timeSlot,
+          affectedAppointments: 0,
+          reason: reason
+        },
+        req
+      });
+
+      return res.json({
+        success: true,
+        message: 'Time slot marked as unavailable. No appointments affected.',
+        data: {
+          appointmentDate: normalizedDate,
+          timeSlot: timeSlot
+        }
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Unblock a specific time slot
+// @route   DELETE /api/doctor/schedule/mark-unavailable
+// @access  Private/Doctor
+export const unblockTimeSlot = async (req, res) => {
+  try {
+    const { appointmentDate, timeSlot } = req.body;
+
+    // Validate required fields
+    if (!appointmentDate) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Appointment date is required' 
+      });
+    }
+
+    if (!timeSlot || !timeSlot.start || !timeSlot.end) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Time slot with start and end time is required' 
+      });
+    }
+
+    // Validate date format
+    const selectedDate = new Date(appointmentDate);
+    if (isNaN(selectedDate.getTime())) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid date format' 
+      });
+    }
+
+    // Validate time format (HH:MM)
+    const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(timeSlot.start) || !timeRegex.test(timeSlot.end)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid time format. Use HH:MM format (e.g., 09:00, 14:30)' 
+      });
+    }
+
+    const doctor = await Doctor.findOne({ userId: req.user._id });
+    if (!doctor) {
+      return res.status(404).json({ 
+        success: false,
+        message: DOCTOR_MESSAGES.DOCTOR_PROFILE_NOT_FOUND 
+      });
+    }
+
+    // Normalize date to start of day for comparison
+    const normalizedDate = new Date(selectedDate);
+    normalizedDate.setHours(0, 0, 0, 0);
+    const dateStr = normalizedDate.toISOString().split('T')[0];
+
+    // Check if doctor has any blocked time slots
+    if (!doctor.blockedTimeSlots || doctor.blockedTimeSlots.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'No blocked time slots found. This slot may already be unblocked.' 
+      });
+    }
+
+    // Find the specific blocked time slot
+    const blockedSlotIndex = doctor.blockedTimeSlots.findIndex(blocked => {
+      const blockedDateStr = new Date(blocked.date).toISOString().split('T')[0];
+      return blockedDateStr === dateStr && 
+             blocked.timeSlot &&
+             blocked.timeSlot.start === timeSlot.start && 
+             blocked.timeSlot.end === timeSlot.end;
+    });
+
+    if (blockedSlotIndex === -1) {
+      return res.status(404).json({ 
+        success: false,
+        message: `Time slot (${timeSlot.start} - ${timeSlot.end}) on ${selectedDate.toLocaleDateString()} is not blocked or may have already been unblocked.` 
+      });
+    }
+
+    const originalCount = doctor.blockedTimeSlots.length;
+
+    // Remove the specific blocked time slot
+    doctor.blockedTimeSlots.splice(blockedSlotIndex, 1);
+    await doctor.save();
+
+    // Log the action
+    await createAuditLog({
+      user: req.user,
+      action: 'unblock_time_slot',
+      entityType: 'doctor',
+      entityId: doctor._id,
+      method: 'DELETE',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: {
+        appointmentDate: normalizedDate,
+        timeSlot: timeSlot,
+        unblockedSlotId: doctor.blockedTimeSlots[blockedSlotIndex]?._id
+      },
+      req
+    }).catch(err => {
+      // Log error but don't fail the request
+      console.error('Error creating audit log:', err);
+    });
+
+    return res.json({
+      success: true,
+      message: `Time slot (${timeSlot.start} - ${timeSlot.end}) on ${selectedDate.toLocaleDateString()} has been unblocked successfully`,
+      data: {
+        appointmentDate: normalizedDate,
+        timeSlot: timeSlot,
+        unblockedCount: 1,
+        remainingBlockedSlots: doctor.blockedTimeSlots.length
+      }
+    });
+  } catch (error) {
+    console.error('Error unblocking time slot:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: error.message || 'An error occurred while unblocking the time slot' 
+    });
   }
 };
 
@@ -1005,6 +1409,105 @@ export const declineAppointment = async (req, res) => {
     res.json({ 
       message: DOCTOR_MESSAGES.APPOINTMENT_DECLINED_SUCCESSFULLY, 
       appointment: updatedAppointment 
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Request reschedule for an appointment (doctor unavailable)
+// @route   PUT /api/doctor/appointments/:id/request-reschedule
+// @access  Private/Doctor
+export const requestRescheduleAppointment = async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    const appointment = await Appointment.findOne({
+      _id: req.params.id,
+      doctorId: req.user._id
+    }).populate('patientId', 'firstName lastName email phone');
+
+    if (!appointment) {
+      return res.status(404).json({ message: APPOINTMENT_MESSAGES.APPOINTMENT_NOT_FOUND });
+    }
+
+    // Only allow reschedule request for pending or confirmed appointments
+    if (appointment.status === APPOINTMENT_STATUSES.COMPLETED || 
+        appointment.status === APPOINTMENT_STATUSES.CANCELLED ||
+        appointment.status === APPOINTMENT_STATUSES.RESCHEDULE_REQUESTED) {
+      return res.status(400).json({ 
+        message: DOCTOR_MESSAGES.CANNOT_REQUEST_RESCHEDULE_COMPLETED_OR_CANCELLED 
+      });
+    }
+
+    // Store original appointment info if not already stored
+    if (!appointment.reschedulingInfo) {
+      appointment.reschedulingInfo = {};
+    }
+    appointment.reschedulingInfo.originalDate = appointment.appointmentDate;
+    appointment.reschedulingInfo.originalTimeSlot = appointment.timeSlot;
+    appointment.reschedulingInfo.doctorUnavailabilityReason = reason || 'Doctor unavailable due to personal work';
+    appointment.reschedulingInfo.requestedAt = new Date();
+    appointment.reschedulingInfo.requestedBy = req.user._id;
+
+    // Update status to indicate reschedule requested
+    appointment.status = APPOINTMENT_STATUSES.RESCHEDULE_REQUESTED;
+    await appointment.save();
+
+    // Get all admin users
+    const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true });
+    
+    // Create notifications for all admins
+    const notifications = admins.map(admin => ({
+      userId: admin._id,
+      type: 'doctor_unavailable',
+      title: 'Appointment Reschedule Request - Action Required',
+      message: `Dr. ${req.user.firstName} ${req.user.lastName} has requested to reschedule appointment ${appointment.appointmentNumber} with patient ${appointment.patientId.firstName} ${appointment.patientId.lastName}. Reason: ${reason || 'Doctor unavailable due to personal work'}`,
+      priority: 'urgent',
+      relatedEntityType: 'appointment',
+      relatedEntityId: appointment._id,
+      actionUrl: `/admin/appointments/${appointment._id}`,
+      metadata: {
+        doctorId: req.user._id,
+        doctorName: `${req.user.firstName} ${req.user.lastName}`,
+        appointmentId: appointment._id.toString(),
+        appointmentNumber: appointment.appointmentNumber,
+        patientName: `${appointment.patientId.firstName} ${appointment.patientId.lastName}`,
+        appointmentDate: appointment.appointmentDate,
+        timeSlot: appointment.timeSlot,
+        reason: reason || 'Doctor unavailable due to personal work'
+      }
+    }));
+
+    await createBulkNotifications(notifications);
+
+    // Log the action
+    await createAuditLog({
+      user: req.user,
+      action: 'request_appointment_reschedule',
+      entityType: 'appointment',
+      entityId: appointment._id,
+      method: 'PUT',
+      endpoint: req.originalUrl,
+      status: 'success',
+      statusCode: HTTP_STATUS.OK,
+      metadata: {
+        appointmentId: appointment._id,
+        appointmentNumber: appointment.appointmentNumber,
+        patientId: appointment.patientId._id,
+        reason: reason || 'Doctor unavailable due to personal work'
+      },
+      req
+    });
+
+    const updatedAppointment = await Appointment.findById(appointment._id)
+      .populate('patientId', 'firstName lastName email phone');
+
+    res.json({ 
+      message: DOCTOR_MESSAGES.APPOINTMENT_RESCHEDULE_REQUESTED, 
+      appointment: updatedAppointment,
+      notificationSent: true,
+      adminNotified: admins.length
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -18,6 +18,7 @@ import {
   deletePatient,
   getAppointments,
   cancelAppointment,
+  rescheduleAppointment,
   getAllUsers,
   createAdmin,
   getAdmins,
@@ -98,6 +99,7 @@ router.delete('/patients/:id', deletePatient);
 // Appointments
 router.get(ADMIN_ROUTES.APPOINTMENTS, getAppointments);
 router.put('/appointments/:id/cancel', cancelAppointment);
+router.put('/appointments/:id/reschedule', rescheduleAppointment);
 
 // Users
 router.get(ADMIN_ROUTES.USERS, getAllUsers);

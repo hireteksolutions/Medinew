@@ -22,16 +22,22 @@ import {
   Clock,
   IndianRupee,
   Users,
-  Briefcase
+  Briefcase,
+  Edit,
+  Save,
+  MapPin,
+  GraduationCap,
+  User
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { exportToPDF } from '../../utils/exportUtils';
 import Badge from '../../components/common/Badge';
 import { getUserStatusBadgeVariant } from '../../utils/badgeUtils';
-import { TOAST_MESSAGES } from '../../constants';
+import { TOAST_MESSAGES, DATE_FORMATS } from '../../constants';
 import Pagination from '../../components/common/Pagination';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import DatePickerComponent from '../../components/common/DatePicker';
 
 interface Doctor {
   _id: string;
@@ -75,6 +81,12 @@ export default function Doctors() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [doctorToAction, setDoctorToAction] = useState<Doctor | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Update Profile Modal
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updatingDoctor, setUpdatingDoctor] = useState<any>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [formData, setFormData] = useState<any>({});
 
   // Pagination state
   const [offset, setOffset] = useState(0);
@@ -251,6 +263,90 @@ export default function Doctors() {
       setShowDetails(true);
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_DOCTOR_DETAILS_FAILED);
+    }
+  };
+
+  const handleUpdateProfileClick = async (doctor: Doctor) => {
+    try {
+      const response = await adminService.getDoctorById(doctor._id);
+      const doctorData = response.data.doctor || response.data;
+      setUpdatingDoctor(doctorData);
+      
+      // Initialize form data with current doctor data
+      setFormData({
+        // User fields
+        firstName: doctorData.userId?.firstName || '',
+        lastName: doctorData.userId?.lastName || '',
+        email: doctorData.userId?.email || '',
+        phone: doctorData.userId?.phone || '',
+        dateOfBirth: doctorData.userId?.dateOfBirth ? format(new Date(doctorData.userId.dateOfBirth), 'yyyy-MM-dd') : '',
+        gender: doctorData.userId?.gender || '',
+        address: {
+          street: doctorData.userId?.address?.street || '',
+          city: doctorData.userId?.address?.city || '',
+          state: doctorData.userId?.address?.state || '',
+          zipCode: doctorData.userId?.address?.zipCode || '',
+        },
+        profileImage: doctorData.userId?.profileImage || '',
+        
+        // Doctor fields
+        specialization: doctorData.specialization || '',
+        licenseNumber: doctorData.licenseNumber || '',
+        experience: doctorData.experience || 0,
+        consultationFee: doctorData.consultationFee || 0,
+        biography: doctorData.biography || '',
+        languages: doctorData.languages ? (Array.isArray(doctorData.languages) ? doctorData.languages.join(', ') : doctorData.languages) : '',
+        currentHospitalName: doctorData.currentHospitalName || '',
+        consultationType: doctorData.consultationType && doctorData.consultationType.length > 0 ? doctorData.consultationType[0] : 'both',
+        consultationDuration: doctorData.consultationDuration || 30,
+        education: doctorData.education || [],
+        certifications: doctorData.certifications || []
+      });
+      
+      setShowUpdateModal(true);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to load doctor details');
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!updatingDoctor) return;
+    
+    setIsUpdating(true);
+    try {
+      // Format the data properly
+      const updateData: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        dateOfBirth: formData.dateOfBirth || undefined,
+        gender: formData.gender || undefined,
+        address: formData.address,
+        profileImage: formData.profileImage || undefined,
+        specialization: formData.specialization,
+        licenseNumber: formData.licenseNumber,
+        experience: formData.experience,
+        consultationFee: formData.consultationFee,
+        biography: formData.biography || undefined,
+        languages: formData.languages ? formData.languages.split(',').map((l: string) => l.trim()).filter(Boolean) : [],
+        currentHospitalName: formData.currentHospitalName || undefined,
+        consultationType: formData.consultationType,
+        consultationDuration: formData.consultationDuration,
+        education: formData.education || [],
+        certifications: formData.certifications || []
+      };
+
+      await adminService.updateDoctor(updatingDoctor._id, updateData);
+      toast.success('Doctor profile updated successfully');
+      setShowUpdateModal(false);
+      setUpdatingDoctor(null);
+      setFormData({});
+      fetchDoctors();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to update doctor profile');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -518,6 +614,16 @@ export default function Doctors() {
                             >
                               <Eye className="w-4 h-4" />
                               <span>View</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleUpdateProfileClick(doctor);
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 transition-colors"
+                            >
+                              <Edit className="w-4 h-4" />
+                              <span>Update Profile</span>
                             </button>
                             {!doctor.isApproved && (
                               <>
@@ -916,6 +1022,307 @@ export default function Doctors() {
         type="warning"
         isLoading={isProcessing}
       />
+
+      {/* Update Profile Modal */}
+      {showUpdateModal && updatingDoctor && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowUpdateModal(false)}>
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[95vh] overflow-hidden shadow-2xl border border-gray-200" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-5 flex items-center justify-between shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-md">
+                  <Edit className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Update Doctor Profile</h2>
+                  <p className="text-primary-100 text-sm font-medium">Dr. {updatingDoctor.userId?.firstName} {updatingDoctor.userId?.lastName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowUpdateModal(false);
+                  setUpdatingDoctor(null);
+                  setFormData({});
+                }}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors hover:scale-105"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 sm:p-8 overflow-y-auto max-h-[calc(95vh-140px)]">
+              <div className="space-y-6">
+                {/* Personal Information Section */}
+                <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl p-6 border-2 border-primary-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <User className="w-5 h-5 text-primary-600" />
+                    Personal Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">First Name <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.firstName || ''}
+                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Last Name <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.lastName || ''}
+                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Email <span className="text-red-500">*</span></label>
+                      <input
+                        type="email"
+                        value={formData.email || ''}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Phone <span className="text-red-500">*</span></label>
+                      <input
+                        type="tel"
+                        value={formData.phone || ''}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Date of Birth</label>
+                      <DatePickerComponent
+                        selected={formData.dateOfBirth ? new Date(formData.dateOfBirth) : null}
+                        onChange={(date) => setFormData({ ...formData, dateOfBirth: date ? format(date, DATE_FORMATS.API) : '' })}
+                        placeholderText="Select date of birth"
+                        dateFormat={DATE_FORMATS.DISPLAY}
+                        maxDate={new Date()}
+                        className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                        wrapperClassName="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Gender</label>
+                      <select
+                        value={formData.gender || ''}
+                        onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Profile Image URL</label>
+                      <input
+                        type="url"
+                        value={formData.profileImage || ''}
+                        onChange={(e) => setFormData({ ...formData, profileImage: e.target.value })}
+                        placeholder="https://example.com/profile.jpg"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address Section */}
+                <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-primary-600" />
+                    Address
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Street</label>
+                      <input
+                        type="text"
+                        value={formData.address?.street || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, street: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">City</label>
+                      <input
+                        type="text"
+                        value={formData.address?.city || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, city: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">State</label>
+                      <input
+                        type="text"
+                        value={formData.address?.state || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, state: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Zip Code</label>
+                      <input
+                        type="text"
+                        value={formData.address?.zipCode || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, zipCode: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Professional Information Section */}
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border-2 border-blue-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-primary-600" />
+                    Professional Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Specialization <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.specialization || ''}
+                        onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">License Number <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.licenseNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Experience (Years)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.experience || 0}
+                        onChange={(e) => setFormData({ ...formData, experience: parseInt(e.target.value) || 0 })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Consultation Fee (₹) <span className="text-red-500">*</span></label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.consultationFee || 0}
+                        onChange={(e) => setFormData({ ...formData, consultationFee: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Consultation Type</label>
+                      <select
+                        value={formData.consultationType || 'both'}
+                        onChange={(e) => setFormData({ ...formData, consultationType: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      >
+                        <option value="online">Online</option>
+                        <option value="offline">Offline</option>
+                        <option value="both">Both</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Consultation Duration (Minutes)</label>
+                      <input
+                        type="number"
+                        min="15"
+                        step="15"
+                        value={formData.consultationDuration || 30}
+                        onChange={(e) => setFormData({ ...formData, consultationDuration: parseInt(e.target.value) || 30 })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Current Hospital</label>
+                      <input
+                        type="text"
+                        value={formData.currentHospitalName || ''}
+                        onChange={(e) => setFormData({ ...formData, currentHospitalName: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Languages (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={formData.languages || ''}
+                        onChange={(e) => setFormData({ ...formData, languages: e.target.value })}
+                        placeholder="English, Hindi, Spanish"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Biography</label>
+                      <textarea
+                        value={formData.biography || ''}
+                        onChange={(e) => setFormData({ ...formData, biography: e.target.value })}
+                        rows={4}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all resize-none"
+                        placeholder="Tell us about your professional background..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t-2 border-gray-200">
+                  <button
+                    onClick={() => {
+                      setShowUpdateModal(false);
+                      setUpdatingDoctor(null);
+                      setFormData({});
+                    }}
+                    disabled={isUpdating}
+                    className="px-6 py-3 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 border-2 border-gray-300 hover:border-gray-400"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateProfile}
+                    disabled={isUpdating || !formData.firstName || !formData.lastName || !formData.email || !formData.phone || !formData.specialization || !formData.licenseNumber}
+                    className="px-6 py-3 text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-primary-700 transform hover:scale-105 disabled:transform-none"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Update Profile</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

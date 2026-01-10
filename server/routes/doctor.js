@@ -9,6 +9,8 @@ import {
   updateWeeklySchedule,
   blockDates,
   unblockDates,
+  markTimeSlotUnavailable,
+  unblockTimeSlot,
   changePassword,
   uploadCertifications,
   // Dashboard
@@ -22,6 +24,7 @@ import {
   declineAppointment,
   completeAppointment,
   rescheduleAppointment,
+  requestRescheduleAppointment,
   // Patients
   getPatients,
   getPatientHistory,
@@ -58,6 +61,8 @@ router.put(DOCTOR_ROUTES.SCHEDULE, updateSchedule); // Backward compatibility
 router.put(DOCTOR_ROUTES.SCHEDULE_WEEKLY, updateWeeklySchedule);
 router.post(DOCTOR_ROUTES.SCHEDULE_BLOCK_DATES, blockDates);
 router.delete(DOCTOR_ROUTES.SCHEDULE_BLOCK_DATES, unblockDates);
+router.post(DOCTOR_ROUTES.SCHEDULE_MARK_UNAVAILABLE, markTimeSlotUnavailable);
+router.delete(DOCTOR_ROUTES.SCHEDULE_MARK_UNAVAILABLE, unblockTimeSlot);
 
 // Dashboard Routes
 router.get(DOCTOR_ROUTES.DASHBOARD, getDashboard);
@@ -71,6 +76,7 @@ router.put(DOCTOR_ROUTES.APPOINTMENT_ACCEPT, acceptAppointment);
 router.put(DOCTOR_ROUTES.APPOINTMENT_DECLINE, declineAppointment);
 router.put(DOCTOR_ROUTES.APPOINTMENT_COMPLETE, completeAppointment);
 router.put(DOCTOR_ROUTES.APPOINTMENT_RESCHEDULE, rescheduleAppointment);
+router.put(DOCTOR_ROUTES.APPOINTMENT_REQUEST_RESCHEDULE, requestRescheduleAppointment);
 
 // Patient Routes
 router.get(DOCTOR_ROUTES.PATIENTS, getPatients);

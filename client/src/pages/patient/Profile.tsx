@@ -77,9 +77,10 @@ export default function Profile() {
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size should be less than 5MB');
+    // Validate file size (max 10MB - configurable, matches backend)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast.error(`Image size should be less than ${maxSize / (1024 * 1024)}MB`);
       return;
     }
 
@@ -94,7 +95,9 @@ export default function Profile() {
         isPublic: 'true'
       });
 
-      const imageUrl = uploadResponse.data.file.fileUrl;
+      // Use signedUrl if available (for private buckets), otherwise use fileUrl (for public buckets)
+      const fileData = uploadResponse.data.file;
+      const imageUrl = fileData.signedUrl || fileData.fileUrl || fileData.publicUrl;
 
       // Update profile with new image URL
       await authService.updateProfile({ profileImage: imageUrl });

@@ -35,6 +35,7 @@ export const APPOINTMENT_MESSAGES = {
   CANNOT_RESCHEDULE_COMPLETED_OR_CANCELLED: 'Cannot reschedule completed or cancelled appointment',
   APPOINTMENT_RESCHEDULED_SUCCESSFULLY: 'Appointment rescheduled successfully',
   APPOINTMENT_UPDATED_SUCCESSFULLY: 'Appointment updated successfully',
+  APPOINTMENT_RESCHEDULE_REQUESTED: 'Reschedule request submitted successfully. Admin has been notified.',
 };
 
 // Doctor Messages
@@ -59,6 +60,8 @@ export const DOCTOR_MESSAGES = {
   APPOINTMENT_ALREADY_COMPLETED: 'Appointment is already completed',
   CANNOT_COMPLETE_CANCELLED_APPOINTMENT: 'Cannot complete a cancelled appointment',
   APPOINTMENT_MARKED_AS_COMPLETED: 'Appointment marked as completed',
+  CANNOT_REQUEST_RESCHEDULE_COMPLETED_OR_CANCELLED: 'Cannot request reschedule for completed or cancelled appointments',
+  APPOINTMENT_RESCHEDULE_REQUESTED: 'Reschedule request submitted successfully. Admin has been notified.',
 };
 
 // File Messages

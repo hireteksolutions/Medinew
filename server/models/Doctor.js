@@ -46,6 +46,10 @@ const doctorSchema = new mongoose.Schema({
     institution: String,
     year: Number
   }],
+  currentHospitalName: {
+    type: String,
+    trim: true
+  },
   experience: {
     type: Number,
     default: 0
@@ -90,6 +94,21 @@ const doctorSchema = new mongoose.Schema({
   },
   blockedDates: [{
     type: Date
+  }],
+  blockedTimeSlots: [{
+    date: {
+      type: Date,
+      required: true
+    },
+    timeSlot: {
+      start: String,
+      end: String
+    },
+    reason: String,
+    blockedAt: {
+      type: Date,
+      default: Date.now
+    }
   }],
   certifications: [{
     name: String,

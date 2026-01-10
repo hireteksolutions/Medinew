@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { adminService } from '../../services/api';
+import { adminService, appointmentService } from '../../services/api';
 import { format } from 'date-fns';
 import { 
   Calendar, 
@@ -25,12 +25,12 @@ import {
   CreditCard,
   Languages
 } from 'lucide-react';
-import { getAppointmentStatusColor, APPOINTMENT_STATUSES, TOAST_MESSAGES } from '../../constants';
+import { getAppointmentStatusColor, APPOINTMENT_STATUSES, TOAST_MESSAGES, DATE_FORMATS } from '../../constants';
 import toast from 'react-hot-toast';
 import { exportToPDF } from '../../utils/exportUtils';
 import DatePickerComponent from '../../components/common/DatePicker';
 import Badge from '../../components/common/Badge';
-import { getAppointmentBadgeVariant, getPaymentStatusBadgeVariant } from '../../utils/badgeUtils';
+import { getAppointmentBadgeVariant, getPaymentStatusBadgeVariant, toTitleCase } from '../../utils/badgeUtils';
 import Pagination from '../../components/common/Pagination';
 
 interface Appointment {
@@ -65,6 +65,16 @@ interface Appointment {
   consultationFee: number;
   reasonForVisit?: string;
   createdAt: string;
+  reschedulingInfo?: {
+    doctorUnavailabilityReason?: string;
+    originalDate?: string;
+    originalTimeSlot?: {
+      start: string;
+      end: string;
+    };
+    requestedBy?: string;
+    requestedAt?: string;
+  };
 }
 
 export default function Appointments() {
@@ -80,6 +90,18 @@ export default function Appointments() {
   const [showDetails, setShowDetails] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  
+  // Reschedule modal state
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState<Date | null>(null);
+  const [rescheduleStartTime, setRescheduleStartTime] = useState<string>('');
+  const [rescheduleEndTime, setRescheduleEndTime] = useState<string>('');
+  const [rescheduleReason, setRescheduleReason] = useState<string>('');
+  const [reschedulingAppointment, setReschedulingAppointment] = useState<Appointment | null>(null);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [availableSlots, setAvailableSlots] = useState<Array<{ start: string; end: string }>>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<{ start: string; end: string } | null>(null);
   
   // Pagination state
   const [offset, setOffset] = useState(0);
@@ -156,6 +178,104 @@ export default function Appointments() {
     setShowDetails(true);
   };
 
+  const handleRescheduleClick = (appointment: Appointment) => {
+    const initialDate = new Date(appointment.appointmentDate);
+    setReschedulingAppointment(appointment);
+    setRescheduleDate(initialDate);
+    setRescheduleStartTime(appointment.timeSlot.start);
+    setRescheduleEndTime(appointment.timeSlot.end);
+    setRescheduleReason('');
+    setSelectedSlot(null);
+    setAvailableSlots([]);
+    setShowRescheduleModal(true);
+    setOpenDropdownId(null);
+    
+    // Fetch available slots for the initial date
+    if (initialDate >= new Date()) {
+      setTimeout(() => {
+        fetchAvailableSlots(initialDate, appointment.doctorId._id);
+      }, 100);
+    }
+  };
+
+  const fetchAvailableSlots = async (date: Date, doctorId: string) => {
+    if (!date || !doctorId) {
+      setAvailableSlots([]);
+      return;
+    }
+    
+    try {
+      setLoadingSlots(true);
+      const dateStr = format(date, DATE_FORMATS.API);
+      const response = await appointmentService.getAvailableSlots(doctorId, dateStr);
+      const slots = response.data?.slots || [];
+      setAvailableSlots(slots);
+      
+      if (slots.length === 0) {
+        toast.error('No available slots for this date. Please select another date.');
+      }
+    } catch (error: any) {
+      console.error('Error fetching available slots:', error);
+      toast.error(error.response?.data?.message || 'Failed to fetch available slots');
+      setAvailableSlots([]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
+  const handleDateChange = (date: Date | null) => {
+    setRescheduleDate(date);
+    setSelectedSlot(null);
+    setRescheduleStartTime('');
+    setRescheduleEndTime('');
+    
+    if (date && reschedulingAppointment) {
+      fetchAvailableSlots(date, reschedulingAppointment.doctorId._id);
+    } else {
+      setAvailableSlots([]);
+    }
+  };
+
+  const handleSlotSelect = (slot: { start: string; end: string }) => {
+    setSelectedSlot(slot);
+    setRescheduleStartTime(slot.start);
+    setRescheduleEndTime(slot.end);
+  };
+
+  const handleReschedule = async () => {
+    if (!reschedulingAppointment || !rescheduleDate || !selectedSlot) {
+      toast.error('Please select a date and time slot');
+      return;
+    }
+
+    try {
+      setIsRescheduling(true);
+      await adminService.rescheduleAppointment(reschedulingAppointment._id, {
+        appointmentDate: format(rescheduleDate, DATE_FORMATS.API),
+        timeSlot: {
+          start: selectedSlot.start,
+          end: selectedSlot.end
+        },
+        reason: rescheduleReason || undefined
+      });
+      
+      toast.success('Appointment rescheduled successfully');
+      setShowRescheduleModal(false);
+      setReschedulingAppointment(null);
+      setRescheduleDate(null);
+      setSelectedSlot(null);
+      setRescheduleStartTime('');
+      setRescheduleEndTime('');
+      setRescheduleReason('');
+      setAvailableSlots([]);
+      fetchAppointments();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to reschedule appointment');
+    } finally {
+      setIsRescheduling(false);
+    }
+  };
+
   const exportToCSV = () => {
     const headers = [
       'Appointment Number',
@@ -181,8 +301,8 @@ export default function Appointments() {
       apt.doctorId.specialization,
       format(new Date(apt.appointmentDate), 'yyyy-MM-dd'),
       `${apt.timeSlot.start} - ${apt.timeSlot.end}`,
-      apt.status,
-      apt.paymentStatus,
+      toTitleCase(apt.status),
+      toTitleCase(apt.paymentStatus || 'Pending'),
       `₹${apt.consultationFee}`,
       apt.reasonForVisit || 'N/A'
     ]);
@@ -222,8 +342,8 @@ export default function Appointments() {
       apt.doctorId.specialization,
       format(new Date(apt.appointmentDate), 'yyyy-MM-dd'),
       `${apt.timeSlot.start} - ${apt.timeSlot.end}`,
-      apt.status,
-      apt.paymentStatus || 'Pending',
+      toTitleCase(apt.status),
+      toTitleCase(apt.paymentStatus || 'Pending'),
       `₹${apt.consultationFee}`
     ]);
 
@@ -358,6 +478,8 @@ export default function Appointments() {
                 <option value="all">All Status</option>
                 <option value={APPOINTMENT_STATUSES.PENDING}>Pending</option>
                 <option value={APPOINTMENT_STATUSES.CONFIRMED}>Confirmed</option>
+                <option value={APPOINTMENT_STATUSES.RESCHEDULE_REQUESTED}>Reschedule Requested</option>
+                <option value={APPOINTMENT_STATUSES.RESCHEDULED_BY_ADMIN}>Rescheduled by Admin</option>
                 <option value={APPOINTMENT_STATUSES.COMPLETED}>Completed</option>
                 <option value={APPOINTMENT_STATUSES.CANCELLED}>Cancelled</option>
               </select>
@@ -482,12 +604,12 @@ export default function Appointments() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Badge variant={getAppointmentBadgeVariant(appointment?.status)}>
-                      {appointment?.status}
+                      {toTitleCase(appointment?.status || '')}
                     </Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Badge variant={getPaymentStatusBadgeVariant(appointment?.paymentStatus || 'Pending')}>
-                      {appointment?.paymentStatus || 'Pending'}
+                      {toTitleCase(appointment?.paymentStatus || 'Pending')}
                     </Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -511,6 +633,17 @@ export default function Appointments() {
                             <Eye className="w-4 h-4" />
                             <span>View Details</span>
                           </button>
+                          {(appointment.status === APPOINTMENT_STATUSES.RESCHEDULE_REQUESTED ||
+                            appointment.status === APPOINTMENT_STATUSES.PENDING ||
+                            appointment.status === APPOINTMENT_STATUSES.CONFIRMED) && (
+                            <button
+                              onClick={() => handleRescheduleClick(appointment)}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 transition-colors border-t border-gray-100"
+                            >
+                              <Calendar className="w-4 h-4" />
+                              <span>Reschedule</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -692,6 +825,38 @@ export default function Appointments() {
                 </div>
               </div>
 
+              {/* Rescheduling Info Card */}
+              {selectedAppointment?.reschedulingInfo?.doctorUnavailabilityReason && (
+                <div className="mb-6 p-5 bg-orange-50 border-2 border-orange-300 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-6 h-6 text-orange-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="font-bold text-orange-900 mb-2 flex items-center gap-2">
+                        Reschedule Request
+                        <Badge variant="warning" className="text-xs">Action Required</Badge>
+                      </h3>
+                      <p className="text-sm text-orange-800 mb-3">
+                        <strong>Doctor's Reason:</strong> {selectedAppointment.reschedulingInfo.doctorUnavailabilityReason}
+                      </p>
+                      {selectedAppointment.reschedulingInfo.originalDate && (
+                        <div className="mt-3 pt-3 border-t border-orange-200">
+                          <p className="text-xs font-medium text-orange-700 mb-1">Original Appointment:</p>
+                          <p className="text-sm text-orange-800">
+                            {format(new Date(selectedAppointment.reschedulingInfo.originalDate), 'EEEE, MMMM d, yyyy')} at{' '}
+                            {selectedAppointment.reschedulingInfo.originalTimeSlot?.start} - {selectedAppointment.reschedulingInfo.originalTimeSlot?.end}
+                          </p>
+                          {selectedAppointment.reschedulingInfo.requestedAt && (
+                            <p className="text-xs text-orange-600 mt-2">
+                              Requested on: {format(new Date(selectedAppointment.reschedulingInfo.requestedAt), 'MMM d, yyyy h:mm a')}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Appointment Details Card */}
               <div className="mb-6">
                 <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-100">
@@ -738,7 +903,7 @@ export default function Appointments() {
                       <div>
                         <p className="text-xs font-medium text-gray-600 mb-1">Appointment Status</p>
                         <Badge variant={getAppointmentBadgeVariant(selectedAppointment.status)} className="text-xs">
-                          {selectedAppointment.status}
+                          {toTitleCase(selectedAppointment.status)}
                         </Badge>
                       </div>
                     </div>
@@ -749,7 +914,7 @@ export default function Appointments() {
                       <div>
                         <p className="text-xs font-medium text-gray-600 mb-1">Payment Status</p>
                         <Badge variant={getPaymentStatusBadgeVariant(selectedAppointment?.paymentStatus || 'Pending')} className="text-xs">
-                          {selectedAppointment?.paymentStatus || 'Pending'}
+                          {toTitleCase(selectedAppointment?.paymentStatus || 'Pending')}
                         </Badge>
                       </div>
                     </div>
@@ -770,6 +935,220 @@ export default function Appointments() {
                 </div>
               )}
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule Appointment Modal */}
+      {showRescheduleModal && reschedulingAppointment && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowRescheduleModal(false)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden shadow-2xl border border-gray-200" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-5 flex items-center justify-between shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-md">
+                  <Calendar className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Reschedule Appointment</h2>
+                  <p className="text-primary-100 text-sm font-medium">#{reschedulingAppointment.appointmentNumber || reschedulingAppointment._id.slice(-8)}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRescheduleModal(false)}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors hover:scale-105"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 sm:p-8 overflow-y-auto max-h-[calc(95vh-140px)]">
+              {/* Original Appointment Info */}
+              {reschedulingAppointment.reschedulingInfo?.doctorUnavailabilityReason && (
+                <div className="mb-6 p-4 bg-amber-50 border-2 border-amber-300 rounded-xl shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                      <AlertCircle className="w-5 h-5 text-amber-700" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-amber-900 mb-2">Doctor Unavailability Notice</p>
+                      <p className="text-sm text-amber-800 mb-2">
+                        <strong>Reason:</strong> {reschedulingAppointment.reschedulingInfo.doctorUnavailabilityReason}
+                      </p>
+                      <p className="text-xs text-amber-700 bg-amber-100 px-3 py-2 rounded-md">
+                        <strong>Original Date:</strong> {format(new Date(reschedulingAppointment.appointmentDate), 'EEEE, MMMM d, yyyy')} at {reschedulingAppointment.timeSlot.start} - {reschedulingAppointment.timeSlot.end}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Patient Info */}
+              <div className="mb-6 p-4 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border-2 border-primary-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary-500 flex items-center justify-center">
+                    <User className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Patient Information</h3>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-base font-semibold text-gray-900">
+                    {reschedulingAppointment.patientId.firstName} {reschedulingAppointment.patientId.lastName}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Mail className="w-4 h-4 text-primary-600" />
+                    <span>{reschedulingAppointment.patientId.email}</span>
+                  </div>
+                  {reschedulingAppointment.patientId.phone && (
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Phone className="w-4 h-4 text-primary-600" />
+                      <span>{reschedulingAppointment.patientId.phone}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Reschedule Form */}
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-primary-600" />
+                    New Date <span className="text-red-500">*</span>
+                  </label>
+                  <DatePickerComponent
+                    selected={rescheduleDate}
+                    onChange={handleDateChange}
+                    minDate={new Date()}
+                    placeholderText="Select new date"
+                    dateFormat={DATE_FORMATS.DISPLAY_FULL}
+                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                    wrapperClassName="w-full"
+                  />
+                </div>
+
+                {/* Available Slots Display */}
+                {rescheduleDate && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-primary-600" />
+                      Available Time Slots <span className="text-red-500">*</span>
+                    </label>
+                    {loadingSlots ? (
+                      <div className="flex items-center justify-center py-12 bg-gray-50 rounded-xl border-2 border-gray-200">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                        <span className="ml-3 text-gray-700 font-medium">Loading available slots...</span>
+                      </div>
+                    ) : availableSlots.length === 0 ? (
+                      <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-dashed border-gray-300 rounded-xl text-center">
+                        <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Clock className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <p className="text-gray-700 font-semibold text-base mb-1">No available slots for this date</p>
+                        <p className="text-sm text-gray-500">Please select another date</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-72 overflow-y-auto p-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+                        {availableSlots.map((slot, index) => {
+                          const isSelected = selectedSlot?.start === slot.start && selectedSlot?.end === slot.end;
+                          return (
+                            <button
+                              key={`${slot.start}-${slot.end}-${index}`}
+                              onClick={() => handleSlotSelect(slot)}
+                              className={`p-4 rounded-lg border-2 transition-all text-center transform hover:scale-105 ${
+                                isSelected
+                                  ? 'bg-gradient-to-br from-primary-500 to-primary-600 border-primary-700 text-white shadow-lg scale-105'
+                                  : 'bg-white border-gray-300 hover:border-primary-400 hover:bg-primary-50 text-gray-900 hover:shadow-md'
+                              }`}
+                            >
+                              <div className="flex flex-col items-center gap-2">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                  isSelected ? 'bg-white/20' : 'bg-primary-100'
+                                }`}>
+                                  <Clock className={`w-4 h-4 ${isSelected ? 'text-white' : 'text-primary-600'}`} />
+                                </div>
+                                <div className={`text-sm font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                                  {format(new Date(`2000-01-01T${slot.start}`), DATE_FORMATS.TIME_12H)}
+                                </div>
+                                <div className={`text-xs font-medium ${isSelected ? 'text-primary-100' : 'text-gray-600'}`}>
+                                  to {format(new Date(`2000-01-01T${slot.end}`), DATE_FORMATS.TIME_12H)}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedSlot && (
+                  <div className="p-4 bg-gradient-to-r from-primary-50 to-primary-100 border-2 border-primary-300 rounded-xl shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary-500 flex items-center justify-center">
+                        <CheckCircle className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-primary-800 mb-1">Selected Time Slot</p>
+                        <p className="text-base font-bold text-primary-900">
+                          {format(new Date(`2000-01-01T${selectedSlot.start}`), DATE_FORMATS.TIME_12H)} - {format(new Date(`2000-01-01T${selectedSlot.end}`), DATE_FORMATS.TIME_12H)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-primary-600" />
+                    Reason for Rescheduling (Optional)
+                  </label>
+                  <textarea
+                    value={rescheduleReason}
+                    onChange={(e) => setRescheduleReason(e.target.value)}
+                    placeholder="Reason for rescheduling (e.g., Patient requested new time, Doctor availability change, etc.)"
+                    rows={3}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 resize-none transition-all text-gray-700 placeholder-gray-400"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-8 flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t-2 border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowRescheduleModal(false);
+                    setReschedulingAppointment(null);
+                    setRescheduleDate(null);
+                    setSelectedSlot(null);
+                    setRescheduleStartTime('');
+                    setRescheduleEndTime('');
+                    setRescheduleReason('');
+                    setAvailableSlots([]);
+                  }}
+                  disabled={isRescheduling}
+                  className="px-6 py-3 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 border-2 border-gray-300 hover:border-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReschedule}
+                  disabled={isRescheduling || !rescheduleDate || !selectedSlot}
+                  className="px-6 py-3 text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-primary-700 transform hover:scale-105 disabled:transform-none"
+                >
+                  {isRescheduling ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Rescheduling...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4" />
+                      <span>Reschedule Appointment</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

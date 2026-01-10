@@ -22,6 +22,8 @@ export const APPOINTMENT_STATUSES = {
   CONFIRMED: 'confirmed',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
+  RESCHEDULED_BY_ADMIN: 'rescheduled_by_admin',
+  RESCHEDULE_REQUESTED: 'reschedule_requested',
 };
 
 export const APPOINTMENT_STATUS_VALUES = Object.values(APPOINTMENT_STATUSES);

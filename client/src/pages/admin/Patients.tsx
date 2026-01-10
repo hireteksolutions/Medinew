@@ -23,15 +23,18 @@ import {
   IndianRupee,
   Clock,
   User,
-  Shield
+  Shield,
+  Edit,
+  Save,
+  MapPin
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { exportToPDF } from '../../utils/exportUtils';
 import DatePickerComponent from '../../components/common/DatePicker';
 import Badge from '../../components/common/Badge';
-import { getUserStatusBadgeVariant, getAppointmentBadgeVariant, getPaymentStatusBadgeVariant } from '../../utils/badgeUtils';
-import { TOAST_MESSAGES } from '../../constants';
+import { getUserStatusBadgeVariant, getAppointmentBadgeVariant, getPaymentStatusBadgeVariant, toTitleCase } from '../../utils/badgeUtils';
+import { TOAST_MESSAGES, BLOOD_GROUP_OPTIONS, GENDER_OPTIONS, DATE_FORMATS } from '../../constants';
 import Pagination from '../../components/common/Pagination';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 
@@ -68,6 +71,12 @@ export default function Patients() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [patientToAction, setPatientToAction] = useState<Patient | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Update Profile Modal
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updatingPatient, setUpdatingPatient] = useState<any>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [formData, setFormData] = useState<any>({});
 
   // Pagination state
   const [offset, setOffset] = useState(0);
@@ -204,6 +213,96 @@ export default function Patients() {
       setShowDetails(true);
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_PATIENT_DETAILS_FAILED);
+    }
+  };
+
+  const handleUpdateProfileClick = async (patient: Patient) => {
+    try {
+      const response = await adminService.getPatientById(patient._id);
+      const patientData = response.data.patient || response.data;
+      setUpdatingPatient(patientData);
+      
+      // Initialize form data with current patient data
+      setFormData({
+        // User fields
+        firstName: patientData.userId?.firstName || '',
+        lastName: patientData.userId?.lastName || '',
+        email: patientData.userId?.email || '',
+        phone: patientData.userId?.phone || '',
+        dateOfBirth: patientData.userId?.dateOfBirth ? format(new Date(patientData.userId.dateOfBirth), 'yyyy-MM-dd') : '',
+        gender: patientData.userId?.gender || '',
+        address: {
+          street: patientData.userId?.address?.street || '',
+          city: patientData.userId?.address?.city || '',
+          state: patientData.userId?.address?.state || '',
+          zipCode: patientData.userId?.address?.zipCode || '',
+        },
+        profileImage: patientData.userId?.profileImage || '',
+        
+        // Patient fields
+        bloodGroup: patientData.bloodGroup || '',
+        height: patientData.height || '',
+        weight: patientData.weight || '',
+        allergies: patientData.allergies ? (Array.isArray(patientData.allergies) ? patientData.allergies.join(', ') : patientData.allergies) : '',
+        medicalHistory: patientData.medicalHistory || [],
+        currentMedications: patientData.currentMedications || [],
+        chronicConditions: patientData.chronicConditions || [],
+        previousSurgeries: patientData.previousSurgeries || [],
+        emergencyContact: patientData.emergencyContact || { name: '', phone: '', relation: '' },
+        insuranceInfo: {
+          provider: patientData.insuranceInfo?.provider || '',
+          policyNumber: patientData.insuranceInfo?.policyNumber || '',
+          groupNumber: patientData.insuranceInfo?.groupNumber || '',
+          expiryDate: patientData.insuranceInfo?.expiryDate ? (typeof patientData.insuranceInfo.expiryDate === 'string' ? patientData.insuranceInfo.expiryDate : format(new Date(patientData.insuranceInfo.expiryDate), DATE_FORMATS.API)) : ''
+        }
+      });
+      
+      setShowUpdateModal(true);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to load patient details');
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!updatingPatient) return;
+    
+    setIsUpdating(true);
+    try {
+      // Format the data properly
+      const updateData: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        dateOfBirth: formData.dateOfBirth || undefined,
+        gender: formData.gender || undefined,
+        address: formData.address,
+        profileImage: formData.profileImage || undefined,
+        bloodGroup: formData.bloodGroup || undefined,
+        height: formData.height ? parseFloat(formData.height) : undefined,
+        weight: formData.weight ? parseFloat(formData.weight) : undefined,
+        allergies: formData.allergies ? formData.allergies.split(',').map((a: string) => a.trim()).filter(Boolean) : [],
+        medicalHistory: formData.medicalHistory || [],
+        currentMedications: formData.currentMedications || [],
+        chronicConditions: formData.chronicConditions || [],
+        previousSurgeries: formData.previousSurgeries || [],
+        emergencyContact: formData.emergencyContact || undefined,
+        insuranceInfo: formData.insuranceInfo ? {
+          ...formData.insuranceInfo,
+          expiryDate: formData.insuranceInfo.expiryDate ? (typeof formData.insuranceInfo.expiryDate === 'string' ? formData.insuranceInfo.expiryDate : format(new Date(formData.insuranceInfo.expiryDate), DATE_FORMATS.API)) : undefined
+        } : undefined
+      };
+
+      await adminService.updatePatient(updatingPatient._id, updateData);
+      toast.success('Patient profile updated successfully');
+      setShowUpdateModal(false);
+      setUpdatingPatient(null);
+      setFormData({});
+      fetchPatients();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to update patient profile');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -447,6 +546,16 @@ export default function Patients() {
                             >
                               <Eye className="w-4 h-4" />
                               <span>View</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleUpdateProfileClick(patient);
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 transition-colors"
+                            >
+                              <Edit className="w-4 h-4" />
+                              <span>Update Profile</span>
                             </button>
                             {patient.userId.isActive ? (
                               <button
@@ -885,12 +994,12 @@ export default function Patients() {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <Badge variant={getAppointmentBadgeVariant(appointment.status)}>
-                                {appointment.status}
+                                {toTitleCase(appointment.status)}
                               </Badge>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <Badge variant={getPaymentStatusBadgeVariant(appointment.payment?.status || 'N/A')}>
-                                {appointment.payment?.status || 'N/A'}
+                              <Badge variant={getPaymentStatusBadgeVariant(appointment.payment?.status || 'Pending')}>
+                                {toTitleCase(appointment.payment?.status || 'Pending')}
                               </Badge>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
@@ -949,6 +1058,351 @@ export default function Patients() {
         type="danger"
         isLoading={isProcessing}
       />
+
+      {/* Update Profile Modal */}
+      {showUpdateModal && updatingPatient && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowUpdateModal(false)}>
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[95vh] overflow-hidden shadow-2xl border border-gray-200" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-5 flex items-center justify-between shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-md">
+                  <Edit className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Update Patient Profile</h2>
+                  <p className="text-primary-100 text-sm font-medium">{updatingPatient.userId?.firstName} {updatingPatient.userId?.lastName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowUpdateModal(false);
+                  setUpdatingPatient(null);
+                  setFormData({});
+                }}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors hover:scale-105"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 sm:p-8 overflow-y-auto max-h-[calc(95vh-140px)]">
+              <div className="space-y-6">
+                {/* Personal Information Section */}
+                <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl p-6 border-2 border-primary-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <User className="w-5 h-5 text-primary-600" />
+                    Personal Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">First Name <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.firstName || ''}
+                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Last Name <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.lastName || ''}
+                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Email <span className="text-red-500">*</span></label>
+                      <input
+                        type="email"
+                        value={formData.email || ''}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Phone <span className="text-red-500">*</span></label>
+                      <input
+                        type="tel"
+                        value={formData.phone || ''}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Date of Birth</label>
+                      <DatePickerComponent
+                        selected={formData.dateOfBirth ? new Date(formData.dateOfBirth) : null}
+                        onChange={(date) => setFormData({ ...formData, dateOfBirth: date ? format(date, DATE_FORMATS.API) : '' })}
+                        placeholderText="Select date of birth"
+                        dateFormat={DATE_FORMATS.DISPLAY}
+                        maxDate={new Date()}
+                        className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                        wrapperClassName="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Gender</label>
+                      <select
+                        value={formData.gender || ''}
+                        onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      >
+                        <option value="">Select Gender</option>
+                        {GENDER_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Profile Image URL</label>
+                      <input
+                        type="url"
+                        value={formData.profileImage || ''}
+                        onChange={(e) => setFormData({ ...formData, profileImage: e.target.value })}
+                        placeholder="https://example.com/profile.jpg"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address Section */}
+                <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-primary-600" />
+                    Address
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Street</label>
+                      <input
+                        type="text"
+                        value={formData.address?.street || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, street: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">City</label>
+                      <input
+                        type="text"
+                        value={formData.address?.city || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, city: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">State</label>
+                      <input
+                        type="text"
+                        value={formData.address?.state || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, state: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Zip Code</label>
+                      <input
+                        type="text"
+                        value={formData.address?.zipCode || ''}
+                        onChange={(e) => setFormData({ ...formData, address: { ...formData.address, zipCode: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Medical Information Section */}
+                <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl p-6 border-2 border-red-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Heart className="w-5 h-5 text-red-600" />
+                    Medical Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Blood Group</label>
+                      <select
+                        value={formData.bloodGroup || ''}
+                        onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      >
+                        <option value="">Select Blood Group</option>
+                        {BLOOD_GROUP_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Height (cm)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={formData.height || ''}
+                        onChange={(e) => setFormData({ ...formData, height: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Weight (kg)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={formData.weight || ''}
+                        onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Allergies (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={formData.allergies || ''}
+                        onChange={(e) => setFormData({ ...formData, allergies: e.target.value })}
+                        placeholder="Peanuts, Dust, Latex"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Emergency Contact Section */}
+                <div className="bg-amber-50 rounded-xl p-6 border-2 border-amber-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                    Emergency Contact
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Name</label>
+                      <input
+                        type="text"
+                        value={formData.emergencyContact?.name || ''}
+                        onChange={(e) => setFormData({ ...formData, emergencyContact: { ...formData.emergencyContact, name: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Phone</label>
+                      <input
+                        type="tel"
+                        value={formData.emergencyContact?.phone || ''}
+                        onChange={(e) => setFormData({ ...formData, emergencyContact: { ...formData.emergencyContact, phone: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Relation</label>
+                      <input
+                        type="text"
+                        value={formData.emergencyContact?.relation || ''}
+                        onChange={(e) => setFormData({ ...formData, emergencyContact: { ...formData.emergencyContact, relation: e.target.value } })}
+                        placeholder="Father, Mother, Spouse, etc."
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Insurance Information Section */}
+                <div className="bg-blue-50 rounded-xl p-6 border-2 border-blue-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                    Insurance Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Insurance Provider</label>
+                      <input
+                        type="text"
+                        value={formData.insuranceInfo?.provider || ''}
+                        onChange={(e) => setFormData({ ...formData, insuranceInfo: { ...formData.insuranceInfo, provider: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Policy Number</label>
+                      <input
+                        type="text"
+                        value={formData.insuranceInfo?.policyNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, insuranceInfo: { ...formData.insuranceInfo, policyNumber: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Group Number</label>
+                      <input
+                        type="text"
+                        value={formData.insuranceInfo?.groupNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, insuranceInfo: { ...formData.insuranceInfo, groupNumber: e.target.value } })}
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Expiry Date</label>
+                      <DatePickerComponent
+                        selected={formData.insuranceInfo?.expiryDate ? new Date(formData.insuranceInfo.expiryDate) : null}
+                        onChange={(date) => setFormData({ 
+                          ...formData, 
+                          insuranceInfo: { 
+                            ...formData.insuranceInfo, 
+                            expiryDate: date ? format(date, DATE_FORMATS.API) : '' 
+                          } 
+                        })}
+                        placeholderText="Select expiry date"
+                        dateFormat={DATE_FORMATS.DISPLAY}
+                        minDate={new Date()}
+                        className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
+                        wrapperClassName="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t-2 border-gray-200">
+                  <button
+                    onClick={() => {
+                      setShowUpdateModal(false);
+                      setUpdatingPatient(null);
+                      setFormData({});
+                    }}
+                    disabled={isUpdating}
+                    className="px-6 py-3 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 border-2 border-gray-300 hover:border-gray-400"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateProfile}
+                    disabled={isUpdating || !formData.firstName || !formData.lastName || !formData.email || !formData.phone}
+                    className="px-6 py-3 text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-primary-700 transform hover:scale-105 disabled:transform-none"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Update Profile</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

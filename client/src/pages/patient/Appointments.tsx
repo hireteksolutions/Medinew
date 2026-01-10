@@ -8,6 +8,7 @@ import { Calendar, X, Star, Clock, MoreVertical, IndianRupee, Plus, Stethoscope,
 import { APPOINTMENT_STATUSES, APPOINTMENT_FILTERS, canCancelAppointment, TOAST_MESSAGES } from '../../constants';
 import Badge from '../../components/common/Badge';
 import Pagination from '../../components/common/Pagination';
+import { getAppointmentBadgeVariant, toTitleCase } from '../../utils/badgeUtils';
 
 export default function Appointments() {
   const { showLoader, hideLoader } = useLoader();
@@ -470,13 +471,8 @@ export default function Appointments() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={
-                        appointment.status === APPOINTMENT_STATUSES.CONFIRMED ? 'success' :
-                        appointment.status === APPOINTMENT_STATUSES.COMPLETED ? 'info' :
-                        appointment.status === APPOINTMENT_STATUSES.CANCELLED ? 'danger' :
-                        'warning'
-                      }>
-                        {appointment.status}
+                      <Badge variant={getAppointmentBadgeVariant(appointment.status)}>
+                        {toTitleCase(appointment.status)}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

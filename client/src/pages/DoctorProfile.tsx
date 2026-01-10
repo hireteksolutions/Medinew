@@ -151,7 +151,12 @@ export default function DoctorProfile() {
                     </h1>
                     <FavoriteButton doctorId={doctor.userId._id} size="lg" />
                   </div>
-                  <p className="text-primary-500 text-lg sm:text-xl mb-4 font-semibold">{doctor.specialization}</p>
+                  <p className="text-primary-500 text-lg sm:text-xl mb-2 font-semibold">{doctor.specialization}</p>
+                  {doctor.currentHospitalName && (
+                    <p className="text-gray-600 text-sm mb-4">
+                      <span className="font-medium">Current Hospital:</span> {doctor.currentHospitalName}
+                    </p>
+                  )}
                   
                   {/* Enhanced Stats Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">

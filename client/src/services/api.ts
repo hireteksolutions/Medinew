@@ -319,6 +319,14 @@ export const doctorDashboardService = {
     return api.delete(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.SCHEDULE_BLOCK_DATES}`, { data: { dates } });
   },
 
+  markTimeSlotUnavailable: (data: { appointmentDate: string; timeSlot: { start: string; end: string }; reason?: string }) => {
+    return api.post(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.SCHEDULE_MARK_UNAVAILABLE}`, data);
+  },
+
+  unblockTimeSlot: (data: { appointmentDate: string; timeSlot: { start: string; end: string } }) => {
+    return api.delete(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.SCHEDULE_MARK_UNAVAILABLE}`, { data });
+  },
+
   getStats: () => {
     return api.get(`${API_ROUTES.DOCTOR}${DOCTOR_ROUTES.STATS}`);
   },
@@ -391,6 +399,10 @@ export const adminService = {
 
   cancelAppointment: (id: string) => {
     return api.put(`${API_ROUTES.ADMIN}/appointments/${id}/cancel`);
+  },
+
+  rescheduleAppointment: (id: string, data: { appointmentDate: string; timeSlot: { start: string; end: string }; reason?: string }) => {
+    return api.put(`${API_ROUTES.ADMIN}/appointments/${id}/reschedule`, data);
   },
 
   getAllUsers: (params?: any) => {

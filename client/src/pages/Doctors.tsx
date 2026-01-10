@@ -572,6 +572,21 @@ export default function Doctors() {
                         <Award className="w-4 h-4 mr-1" />
                         <span>{doctor.specialization}</span>
                       </div>
+                      {doctor.currentHospitalName && (
+                        <div className="text-gray-600 text-xs mb-2 flex items-center">
+                          <MapPin className="w-3 h-3 mr-1" />
+                          <span className="truncate">{doctor.currentHospitalName}</span>
+                        </div>
+                      )}
+                      {doctor.education && doctor.education.length > 0 && doctor.education[0] && (
+                        <div className="text-gray-600 text-xs mb-2 flex items-center">
+                          <Award className="w-3 h-3 mr-1" />
+                          <span className="truncate">
+                            {doctor.education[0].degree}
+                            {doctor.education[0].institution && ` - ${doctor.education[0].institution}`}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center">
                         <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                         <span className="ml-1 font-semibold text-gray-900">{(doctor.rating || 0).toFixed(1)}</span>

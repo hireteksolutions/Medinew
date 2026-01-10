@@ -51,6 +51,7 @@ export const DOCTOR_ROUTES = {
   SCHEDULE: '/schedule',
   SCHEDULE_WEEKLY: '/schedule/weekly',
   SCHEDULE_BLOCK_DATES: '/schedule/block-dates',
+  SCHEDULE_MARK_UNAVAILABLE: '/schedule/mark-unavailable',
   STATS: '/stats',
 } as const;
 

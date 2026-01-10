@@ -22,6 +22,8 @@ const notificationSchema = new mongoose.Schema({
       'appointment_confirmed',
       'appointment_cancelled',
       'appointment_rescheduled',
+      'doctor_unavailable',
+      'appointment_needs_rescheduling',
       'new_review',
       'new_message',
       'schedule_updated'

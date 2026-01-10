@@ -121,7 +121,29 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Database connection
-connectDB();
+connectDB().then(async () => {
+  // CRITICAL: Validate storage configuration after database is connected
+  // This ensures no LOCAL storage config is active before server accepts requests
+  try {
+    const { validateAndFixStorageConfig } = await import('./utils/validateStorageConfig.js');
+    await validateAndFixStorageConfig();
+    console.log('✅ Server ready - bucket storage configured');
+  } catch (error) {
+    console.error('\n❌ CRITICAL: Storage configuration validation failed!');
+    console.error('   Error:', error.message);
+    console.error('\n⚠️  File uploads are DISABLED until bucket storage is configured.');
+    console.error('\n📋 To fix, choose one:');
+    console.error('   Option 1: Set environment variables in .env file:');
+    console.error('     SUPABASE_ACCESS_KEY_ID=a19d2f12373e75e60d5c2b36e9bdef17');
+    console.error('     SUPABASE_SECRET_ACCESS_KEY=your_secret_key_here');
+    console.error('     SUPABASE_STORAGE_ENDPOINT=https://qmhaxxxhhxooxtyizmqc.storage.supabase.co/storage/v1/s3');
+    console.error('   Option 2: Run: npm run configure:supabase (after setting SUPABASE_SECRET_ACCESS_KEY)');
+    console.error('\n   The server will continue running, but file uploads will fail with clear error messages.');
+    console.error('   This is intentional - files must be stored in bucket storage, not locally.\n');
+  }
+}).catch(error => {
+  console.error('❌ Database connection failed:', error.message);
+});
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -2,6 +2,8 @@ import User from '../models/User.js';
 import Patient from '../models/Patient.js';
 import Doctor from '../models/Doctor.js';
 import UserSession from '../models/UserSession.js';
+import File from '../models/File.js';
+import fileStorageService from '../services/fileStorageService.js';
 import { validationResult } from 'express-validator';
 import crypto from 'crypto';
 import { USER_ROLES, CRYPTO, TIME_CONSTANTS, HTTP_STATUS } from '../constants/index.js';
@@ -21,7 +23,7 @@ export const register = async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
     }
 
-    const { email, password: encryptedPassword, firstName, lastName, phone, role, dateOfBirth, gender, address, licenseNumber, specialization, education, languages } = req.body;
+    const { email, password: encryptedPassword, firstName, lastName, phone, role, dateOfBirth, gender, address, licenseNumber, specialization, education, currentHospitalName, languages } = req.body;
 
     // Decrypt password (if encrypted) - backward compatible with non-encrypted passwords
     const password = encryptedPassword ? decryptPassword(encryptedPassword) : '';
@@ -106,6 +108,7 @@ export const register = async (req, res) => {
             licenseNumber: licenseNumber.trim().toUpperCase(),
             specialization: specialization.trim(),
             education: education && Array.isArray(education) ? education.filter(edu => edu.degree || edu.institution) : [],
+            currentHospitalName: currentHospitalName && currentHospitalName.trim() ? currentHospitalName.trim() : undefined,
             languages: languages && Array.isArray(languages) ? languages.filter(lang => lang && lang.trim()) : [],
             consultationFee: 0, // Default consultation fee, can be updated later in profile
             isApproved: false // Doctors need admin approval
@@ -514,8 +517,45 @@ export const getMe = async (req, res) => {
       profileData = doctor;
     }
 
+    // Generate signed URL for profile image if it exists (works for both public and private buckets)
+    // This ensures images are accessible even if bucket is private
+    let profileImageUrl = user.profileImage;
+    if (profileImageUrl && profileImageUrl.trim() !== '') {
+      try {
+        const File = (await import('../models/File.js')).default;
+        const fileStorageService = (await import('../services/fileStorageService.js')).default;
+        
+        // Try to find file record by URL or relatedEntity
+        const file = await File.findOne({
+          $or: [
+            { fileUrl: profileImageUrl },
+            { 
+              'relatedEntity.type': 'profile-image',
+              'relatedEntity.id': user._id,
+              uploadedBy: user._id,
+              isActive: true
+            }
+          ]
+        });
+
+        if (file && file.storageKey) {
+          await fileStorageService.initialize();
+          // Generate signed URL for profile image (works for both public and private buckets)
+          const signedUrl = await fileStorageService.generateSignedUrl(file._id.toString(), 3600 * 24); // 24 hours
+          profileImageUrl = signedUrl;
+          console.log(`✅ Generated signed URL for profile image: ${user._id}`);
+        }
+      } catch (urlError) {
+        console.warn(`⚠️  Could not generate signed URL for profile image, using public URL: ${urlError.message}`);
+        // Use original URL as fallback (might work if bucket is public)
+      }
+    }
+
     res.json({
-      user,
+      user: {
+        ...user.toObject(),
+        profileImage: profileImageUrl
+      },
       profile: profileData
     });
   } catch (error) {
@@ -648,6 +688,8 @@ export const updateProfile = async (req, res) => {
     const { firstName, lastName, phone, dateOfBirth, gender, address, profileImage } = req.body;
 
     const user = await User.findById(req.user._id);
+    const oldProfileImage = user.profileImage; // Store old profile image URL
+    
     const beforeUpdate = {
       firstName: user.firstName,
       lastName: user.lastName,
@@ -658,13 +700,130 @@ export const updateProfile = async (req, res) => {
       profileImage: user.profileImage
     };
 
+      // Handle profile image update/removal
+    if (profileImage !== undefined) {
+      // If profileImage is being set to empty string or null, delete old image from bucket
+      if (!profileImage || profileImage === '' || profileImage === null) {
+        // Delete old profile image from bucket if it exists
+        if (oldProfileImage && oldProfileImage.trim() !== '') {
+          try {
+            // Try to find file by fileUrl or by relatedEntity (profile-image)
+            let oldFile = await File.findOne({
+              $or: [
+                { fileUrl: oldProfileImage },
+                { 
+                  'relatedEntity.type': 'profile-image',
+                  'relatedEntity.id': user._id,
+                  uploadedBy: user._id,
+                  isActive: true
+                }
+              ]
+            });
+            
+            if (oldFile && oldFile.storageKey) {
+              console.log(`🗑️  Removing profile image - deleting from bucket: ${oldFile.storageKey}`);
+              // Use the deleteFile method which handles bucket deletion properly
+              try {
+                await fileStorageService.initialize();
+                await fileStorageService.deleteFile(oldFile._id.toString(), user._id.toString());
+                console.log(`✅ Old profile image deleted from bucket and database`);
+              } catch (deleteError) {
+                console.error('❌ Error deleting old profile image from bucket:', deleteError.message);
+                // If deleteFile fails, try direct deletion as fallback
+                try {
+                  await fileStorageService.initialize();
+                  if (oldFile.storageProvider === 'aws-s3' || oldFile.storageProvider === 'AWS_S3') {
+                    await fileStorageService.deleteFromS3(oldFile.storageKey);
+                  } else if (oldFile.storageProvider === 'google-cloud' || oldFile.storageProvider === 'GOOGLE_CLOUD') {
+                    await fileStorageService.deleteFromGCS(oldFile.storageKey);
+                  } else if (oldFile.storageProvider === 'azure-blob' || oldFile.storageProvider === 'AZURE_BLOB') {
+                    await fileStorageService.deleteFromAzure(oldFile.storageKey);
+                  }
+                  // Soft delete file record in database
+                  oldFile.isActive = false;
+                  oldFile.deletedAt = new Date();
+                  await oldFile.save();
+                  console.log(`✅ Old profile image deleted from bucket (fallback method)`);
+                } catch (fallbackError) {
+                  console.error('❌ Fallback deletion also failed:', fallbackError.message);
+                  // Continue with profile update even if image deletion fails
+                }
+              }
+            } else {
+              console.warn(`⚠️  Profile image file record not found in database for URL: ${oldProfileImage}`);
+              // If file record not found, still clear the profileImage field
+            }
+          } catch (deleteError) {
+            // Log error but don't fail the profile update
+            console.error('❌ Error deleting old profile image:', deleteError.message);
+            // Continue with profile update even if image deletion fails
+          }
+        }
+        user.profileImage = '';
+      } else if (profileImage !== oldProfileImage) {
+        // Profile image is being changed to a new one - delete old one
+        if (oldProfileImage && oldProfileImage.trim() !== '') {
+          try {
+            // Find old file by URL or relatedEntity (make sure it's not the new image)
+            let oldFile = await File.findOne({
+              $or: [
+                { fileUrl: oldProfileImage },
+                { 
+                  'relatedEntity.type': 'profile-image',
+                  'relatedEntity.id': user._id,
+                  uploadedBy: user._id,
+                  isActive: true,
+                  fileUrl: { $ne: profileImage } // Make sure it's not the new image
+                }
+              ]
+            });
+            
+            if (oldFile && oldFile.storageKey) {
+              console.log(`🗑️  Profile image changed - deleting old image from bucket: ${oldFile.storageKey}`);
+              // Use the deleteFile method which handles bucket deletion properly
+              try {
+                await fileStorageService.initialize();
+                await fileStorageService.deleteFile(oldFile._id.toString(), user._id.toString());
+                console.log(`✅ Old profile image deleted from bucket and database`);
+              } catch (deleteError) {
+                console.error('❌ Error deleting old profile image from bucket:', deleteError.message);
+                // Fallback to direct deletion
+                try {
+                  await fileStorageService.initialize();
+                  if (oldFile.storageProvider === 'aws-s3' || oldFile.storageProvider === 'AWS_S3') {
+                    await fileStorageService.deleteFromS3(oldFile.storageKey);
+                  } else if (oldFile.storageProvider === 'google-cloud' || oldFile.storageProvider === 'GOOGLE_CLOUD') {
+                    await fileStorageService.deleteFromGCS(oldFile.storageKey);
+                  } else if (oldFile.storageProvider === 'azure-blob' || oldFile.storageProvider === 'AZURE_BLOB') {
+                    await fileStorageService.deleteFromAzure(oldFile.storageKey);
+                  }
+                  oldFile.isActive = false;
+                  oldFile.deletedAt = new Date();
+                  await oldFile.save();
+                  console.log(`✅ Old profile image deleted from bucket (fallback method)`);
+                } catch (fallbackError) {
+                  console.error('❌ Fallback deletion also failed:', fallbackError.message);
+                }
+              }
+            }
+          } catch (deleteError) {
+            console.error('❌ Error deleting old profile image:', deleteError.message);
+            // Continue with profile update even if image deletion fails
+          }
+        }
+        user.profileImage = profileImage;
+      } else {
+        // Same image, no change needed
+        user.profileImage = profileImage;
+      }
+    }
+
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (dateOfBirth) user.dateOfBirth = dateOfBirth;
     if (gender) user.gender = gender;
     if (address) user.address = { ...user.address, ...address };
-    if (profileImage) user.profileImage = profileImage;
 
     await user.save();
 

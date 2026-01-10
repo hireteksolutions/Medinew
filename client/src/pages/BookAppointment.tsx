@@ -140,9 +140,11 @@ export default function BookAppointment() {
   const fetchDoctors = async () => {
     try {
       const response = await doctorService.getAll();
-      setDoctors(response.data);
+      const doctorsData = response.data?.doctors || response.data || [];
+      setDoctors(Array.isArray(doctorsData) ? doctorsData : []);
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_DOCTORS_FAILED);
+      setDoctors([]); // Ensure doctors is always an array even on error
     }
   };
 
@@ -435,7 +437,22 @@ export default function BookAppointment() {
                           <h3 className="font-bold text-xl text-gray-900 mb-1">
                             Dr. {selectedDoctor.userId.firstName} {selectedDoctor.userId.lastName}
                           </h3>
-                          <p className="text-primary-600 font-semibold mb-2">{selectedDoctor.specialization}</p>
+                          <p className="text-primary-600 font-semibold mb-1">{selectedDoctor.specialization}</p>
+                          {selectedDoctor.currentHospitalName && (
+                            <p className="text-gray-600 text-sm mb-1 flex items-center">
+                              <MapPin className="w-3 h-3 mr-1" />
+                              <span>{selectedDoctor.currentHospitalName}</span>
+                            </p>
+                          )}
+                          {selectedDoctor.education && selectedDoctor.education.length > 0 && selectedDoctor.education[0] && (
+                            <p className="text-gray-600 text-sm mb-2 flex items-center">
+                              <Award className="w-3 h-3 mr-1" />
+                              <span>
+                                {selectedDoctor.education[0].degree}
+                                {selectedDoctor.education[0].institution && ` - ${selectedDoctor.education[0].institution}`}
+                              </span>
+                            </p>
+                          )}
                           <div className="flex items-center gap-4 text-sm text-gray-600">
                             <div className="flex items-center gap-1">
                               <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
@@ -493,7 +510,22 @@ export default function BookAppointment() {
                                   <CheckCircle className="w-6 h-6 text-primary-500" />
                                 )}
                               </div>
-                              <p className="text-primary-600 font-medium mb-2">{doctor.specialization}</p>
+                              <p className="text-primary-600 font-medium mb-1">{doctor.specialization}</p>
+                              {doctor.currentHospitalName && (
+                                <p className="text-gray-600 text-xs mb-1 flex items-center">
+                                  <MapPin className="w-3 h-3 mr-1" />
+                                  <span className="truncate">{doctor.currentHospitalName}</span>
+                                </p>
+                              )}
+                              {doctor.education && doctor.education.length > 0 && doctor.education[0] && (
+                                <p className="text-gray-600 text-xs mb-2 flex items-center">
+                                  <Award className="w-3 h-3 mr-1" />
+                                  <span className="truncate">
+                                    {doctor.education[0].degree}
+                                    {doctor.education[0].institution && ` - ${doctor.education[0].institution}`}
+                                  </span>
+                                </p>
+                              )}
                               <div className="flex items-center gap-4 text-sm text-gray-600">
                                 <div className="flex items-center gap-1">
                                   <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
