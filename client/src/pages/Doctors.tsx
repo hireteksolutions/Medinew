@@ -80,7 +80,6 @@ export default function Doctors() {
       const specializationsList = Array.isArray(response.data) ? response.data : [];
       setSpecializations(specializationsList);
     } catch (error) {
-      console.error('Error fetching specializations:', error);
       setSpecializations([]);
     } finally {
       setLoadingSpecializations(false);
@@ -104,7 +103,6 @@ export default function Doctors() {
         setLoadingLocation(false);
       },
       (error) => {
-        console.error('Error getting location:', error);
         toast.error('Unable to get your location. Please enter it manually.');
         setLoadingLocation(false);
       },
@@ -182,7 +180,6 @@ export default function Doctors() {
         });
       }
     } catch (error) {
-      console.error('Error fetching doctors:', error);
       setDoctors([]);
       toast.error('Failed to fetch doctors. Please try again.');
     } finally {

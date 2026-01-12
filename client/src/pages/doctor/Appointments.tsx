@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { Calendar, CheckCircle, X, User, Phone, Mail, MapPin, Calendar as CalendarIcon, Droplet, AlertCircle, Pill, Heart, Activity, PhoneCall, FileText, Clock, Eye, Search, Filter, CreditCard, IndianRupee, MoreVertical, Scale, Ruler } from 'lucide-react';
 import DatePickerComponent from '../../components/common/DatePicker';
-import { APPOINTMENT_STATUSES, getAppointmentStatusColor, isActiveAppointment, TOAST_MESSAGES, APPOINTMENT_FILTERS } from '../../constants';
+import { APPOINTMENT_STATUSES, isActiveAppointment, TOAST_MESSAGES, APPOINTMENT_FILTERS } from '../../constants';
 import Badge from '../../components/common/Badge';
 import Pagination from '../../components/common/Pagination';
 import { getAppointmentBadgeVariant, getPaymentStatusBadgeVariant, toTitleCase } from '../../utils/badgeUtils';

@@ -39,7 +39,7 @@ export default function FavoriteButton({ doctorId, className = '', size = 'md' }
       );
       setIsFavorite(isFav);
     } catch (error) {
-      console.error('Error checking favorite status:', error);
+      // Error handled by default state (false)
     } finally {
       setChecking(false);
     }
@@ -68,7 +68,6 @@ export default function FavoriteButton({ doctorId, className = '', size = 'md' }
         toast.success(TOAST_MESSAGES.ADDED_TO_FAVORITES);
       }
     } catch (error: any) {
-      console.error('Error toggling favorite:', error);
       toast.error(
         isFavorite
           ? TOAST_MESSAGES.REMOVE_FROM_FAVORITES_FAILED

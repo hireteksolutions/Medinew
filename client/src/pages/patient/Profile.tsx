@@ -61,7 +61,7 @@ export default function Profile() {
         }
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      // Error handled by empty state
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,6 @@ export default function Profile() {
       }
       toast.success('Profile photo updated successfully!');
     } catch (error: any) {
-      console.error('Error uploading image:', error);
       toast.error(error.response?.data?.message || 'Failed to upload profile photo');
     } finally {
       setUploadingImage(false);

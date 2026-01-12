@@ -180,7 +180,6 @@ export default function Appointments() {
       const doctorsData = response.data?.doctors || response.data || [];
       setFavoriteDoctors(Array.isArray(doctorsData) ? doctorsData.slice(0, 3) : []);
     } catch (error) {
-      console.error('Error fetching favorite doctors:', error);
       setFavoriteDoctors([]);
     } finally {
       setLoadingFavorites(false);

@@ -66,6 +66,7 @@ export const TOAST_MESSAGES = {
   // Export Messages
   EXPORT_GENERATED_SUCCESS: 'Export generated successfully',
   PDF_EXPORT_GENERATED_SUCCESS: 'PDF export generated successfully',
+  NO_DATA_TO_EXPORT: 'No data to export',
   
   // Loading/Error Messages
   LOADING_DOCTORS_FAILED: 'Failed to load doctors',
@@ -75,10 +76,43 @@ export const TOAST_MESSAGES = {
   LOADING_PATIENTS_FAILED: 'Failed to load patients',
   LOADING_PATIENT_DETAILS_FAILED: 'Failed to load patient details',
   LOADING_REPORTS_FAILED: 'Failed to load reports',
+  LOADING_AVAILABLE_SLOTS_FAILED: 'Failed to load available slots',
+  
+  // Profile Update Messages
+  DOCTOR_PROFILE_UPDATED_SUCCESS: 'Doctor profile updated successfully',
+  DOCTOR_PROFILE_UPDATE_FAILED: 'Failed to update doctor profile',
+  PATIENT_PROFILE_UPDATED_SUCCESS: 'Patient profile updated successfully',
+  PATIENT_PROFILE_UPDATE_FAILED: 'Failed to update patient profile',
+  
+  // Appointments Messages
+  APPOINTMENT_RESCHEDULED_SUCCESS: 'Appointment rescheduled successfully',
+  APPOINTMENT_RESCHEDULE_FAILED: 'Failed to reschedule appointment',
+  RESCHEDULE_DATE_AND_SLOT_REQUIRED: 'Please select a date and time slot',
   
   // Settings Messages
   SETTINGS_SAVED_SUCCESS: 'Settings saved successfully',
   SETTINGS_SAVE_FAILED: 'Failed to save settings',
+  LOADING_EMAIL_TEMPLATES_FAILED: 'Failed to load email templates',
+  LOADING_SPECIALIZATIONS_FAILED: 'Failed to load specializations',
+  LOADING_ROLES_FAILED: 'Failed to load roles',
+  LOADING_PERMISSIONS_FAILED: 'Failed to load permissions',
+  SAVING_EMAIL_TEMPLATE_FAILED: 'Failed to save email template',
+  SAVING_SPECIALIZATION_FAILED: 'Failed to save specialization',
+  SAVING_ROLE_FAILED: 'Failed to save role',
+  DELETING_EMAIL_TEMPLATE_FAILED: 'Failed to delete email template',
+  DELETING_SPECIALIZATION_FAILED: 'Failed to delete specialization',
+  DELETING_ROLE_FAILED: 'Failed to delete role',
+  EMAIL_TEMPLATE_SAVED_SUCCESS: 'Email template saved successfully',
+  EMAIL_TEMPLATE_DELETED_SUCCESS: 'Email template deleted successfully',
+  SPECIALIZATION_SAVED_SUCCESS: 'Specialization saved successfully',
+  SPECIALIZATION_DELETED_SUCCESS: 'Specialization deleted successfully',
+  SPECIALIZATION_UPDATED_SUCCESS: 'Specialization updated successfully',
+  SPECIALIZATION_CREATED_SUCCESS: 'Specialization created successfully',
+  ROLE_SAVED_SUCCESS: 'Role saved successfully',
+  ROLE_DELETED_SUCCESS: 'Role deleted successfully',
+  ROLE_UPDATED_SUCCESS: 'Role updated successfully',
+  ROLE_CREATED_SUCCESS: 'Role created successfully',
+  NAME_AND_DISPLAY_NAME_REQUIRED: 'Name and Display Name are required',
   
   // Feature Coming Soon
   FEATURE_COMING_SOON: 'Feature coming soon',

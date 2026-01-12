@@ -146,8 +146,7 @@ export default function Settings() {
         setSettings(response.data);
       }
     } catch (error: any) {
-      console.error('Error loading settings:', error);
-      toast.error(error.response?.data?.message || 'Failed to load settings');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.SETTINGS_SAVE_FAILED);
     } finally {
       setLoading(false);
     }
@@ -158,8 +157,7 @@ export default function Settings() {
       const response = await adminService.getEmailTemplates();
       setEmailTemplates(response.data || []);
     } catch (error: any) {
-      console.error('Error loading email templates:', error);
-      toast.error(error.response?.data?.message || 'Failed to load email templates');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.LOADING_EMAIL_TEMPLATES_FAILED);
     }
   };
 
@@ -168,8 +166,7 @@ export default function Settings() {
       const response = await adminService.getSpecializations();
       setSpecializations(response.data || []);
     } catch (error: any) {
-      console.error('Error loading specializations:', error);
-      toast.error(error.response?.data?.message || 'Failed to load specializations');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.LOADING_SPECIALIZATIONS_FAILED);
     }
   };
 
@@ -178,8 +175,7 @@ export default function Settings() {
       const response = await adminService.getRoles();
       setRoles(response.data || []);
     } catch (error: any) {
-      console.error('Error loading roles:', error);
-      toast.error(error.response?.data?.message || 'Failed to load roles');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.LOADING_ROLES_FAILED);
     }
   };
 
@@ -188,8 +184,7 @@ export default function Settings() {
       const response = await adminService.getPermissions();
       setPermissions(response.data || []);
     } catch (error: any) {
-      console.error('Error loading permissions:', error);
-      toast.error(error.response?.data?.message || 'Failed to load permissions');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.LOADING_PERMISSIONS_FAILED);
     }
   };
 
@@ -226,7 +221,7 @@ export default function Settings() {
       setTemplateForm({ name: '', subject: '', body: '', description: '', category: 'system', isActive: true, variables: [] });
       loadEmailTemplates();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to save email template');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.SAVING_EMAIL_TEMPLATE_FAILED);
     }
   };
 
@@ -240,10 +235,10 @@ export default function Settings() {
     if (!confirm('Are you sure you want to delete this email template?')) return;
     try {
       await adminService.deleteEmailTemplate(id);
-      toast.success('Email template deleted successfully');
+      toast.success(TOAST_MESSAGES.EMAIL_TEMPLATE_DELETED_SUCCESS);
       loadEmailTemplates();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to delete email template');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.DELETING_EMAIL_TEMPLATE_FAILED);
     }
   };
 
@@ -251,17 +246,17 @@ export default function Settings() {
     try {
       if (selectedSpecialization?._id) {
         await adminService.updateSpecialization(selectedSpecialization._id, specializationForm);
-        toast.success('Specialization updated successfully');
+        toast.success(TOAST_MESSAGES.SPECIALIZATION_UPDATED_SUCCESS);
       } else {
         await adminService.createSpecialization(specializationForm);
-        toast.success('Specialization created successfully');
+        toast.success(TOAST_MESSAGES.SPECIALIZATION_CREATED_SUCCESS);
       }
       setShowSpecializationModal(false);
       setSelectedSpecialization(null);
       setSpecializationForm({ name: '', description: '', isActive: true });
       loadSpecializations();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to save specialization');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.SAVING_SPECIALIZATION_FAILED);
     }
   };
 
@@ -275,33 +270,33 @@ export default function Settings() {
     if (!confirm('Are you sure you want to delete this specialization?')) return;
     try {
       await adminService.deleteSpecialization(id);
-      toast.success('Specialization deleted successfully');
+      toast.success(TOAST_MESSAGES.SPECIALIZATION_DELETED_SUCCESS);
       loadSpecializations();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to delete specialization');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.DELETING_SPECIALIZATION_FAILED);
     }
   };
 
   const handleSaveRole = async () => {
     try {
       if (!roleForm.name.trim() || !roleForm.displayName.trim()) {
-        toast.error('Name and Display Name are required');
+        toast.error(TOAST_MESSAGES.NAME_AND_DISPLAY_NAME_REQUIRED);
         return;
       }
       
       if (selectedRole?._id) {
         await adminService.updateRole(selectedRole._id, roleForm);
-        toast.success('Role updated successfully');
+        toast.success(TOAST_MESSAGES.ROLE_UPDATED_SUCCESS);
       } else {
         await adminService.createRole(roleForm);
-        toast.success('Role created successfully');
+        toast.success(TOAST_MESSAGES.ROLE_CREATED_SUCCESS);
       }
       setShowRoleModal(false);
       setSelectedRole(null);
       setRoleForm({ name: '', displayName: '', description: '', permissions: [], isActive: true, isSystem: false });
       loadRoles();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to save role');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.SAVING_ROLE_FAILED);
     }
   };
 
@@ -315,10 +310,10 @@ export default function Settings() {
     if (!confirm('Are you sure you want to delete this role? Users assigned to this role will lose access.')) return;
     try {
       await adminService.deleteRole(id);
-      toast.success('Role deleted successfully');
+      toast.success(TOAST_MESSAGES.ROLE_DELETED_SUCCESS);
       loadRoles();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to delete role');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.DELETING_ROLE_FAILED);
     }
   };
 

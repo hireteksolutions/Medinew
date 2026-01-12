@@ -61,7 +61,6 @@ export default function Patients() {
         setPagination(response.data.pagination);
       }
     } catch (error: any) {
-      console.error('Error fetching patients:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to load patients';
       toast.error(errorMessage);
       setPatients([]);

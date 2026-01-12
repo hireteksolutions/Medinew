@@ -54,7 +54,7 @@ export default function DoctorProfile() {
       // For now, we'll use a placeholder or fetch from appointments if available
       // Since we don't have direct access, we'll show it as part of stats
     } catch (error) {
-      console.error('Error fetching patient count:', error);
+      // Error handled by default state
     }
   };
 
@@ -69,7 +69,7 @@ export default function DoctorProfile() {
         [date]: slots
       }));
     } catch (error) {
-      console.error('Error fetching available slots:', error);
+      // Error handled by empty slots state
       setAvailableSlots(prev => ({
         ...prev,
         [date]: []

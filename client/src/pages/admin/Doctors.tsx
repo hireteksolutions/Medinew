@@ -156,7 +156,6 @@ export default function Doctors() {
       }
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_DOCTORS_FAILED);
-      console.error('Error fetching doctors:', error);
       setDoctors([]); // Set empty array on error
     } finally {
       setLoading(false);
@@ -279,7 +278,7 @@ export default function Doctors() {
         lastName: doctorData.userId?.lastName || '',
         email: doctorData.userId?.email || '',
         phone: doctorData.userId?.phone || '',
-        dateOfBirth: doctorData.userId?.dateOfBirth ? format(new Date(doctorData.userId.dateOfBirth), 'yyyy-MM-dd') : '',
+        dateOfBirth: doctorData.userId?.dateOfBirth ? format(new Date(doctorData.userId.dateOfBirth), DATE_FORMATS.API) : '',
         gender: doctorData.userId?.gender || '',
         address: {
           street: doctorData.userId?.address?.street || '',
@@ -305,7 +304,7 @@ export default function Doctors() {
       
       setShowUpdateModal(true);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to load doctor details');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.LOADING_DOCTOR_DETAILS_FAILED);
     }
   };
 
@@ -338,13 +337,13 @@ export default function Doctors() {
       };
 
       await adminService.updateDoctor(updatingDoctor._id, updateData);
-      toast.success('Doctor profile updated successfully');
+      toast.success(TOAST_MESSAGES.DOCTOR_PROFILE_UPDATED_SUCCESS);
       setShowUpdateModal(false);
       setUpdatingDoctor(null);
       setFormData({});
       fetchDoctors();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to update doctor profile');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.DOCTOR_PROFILE_UPDATE_FAILED);
     } finally {
       setIsUpdating(false);
     }
@@ -384,7 +383,7 @@ export default function Doctors() {
 
   const exportToPDFHandler = () => {
     if (!Array.isArray(doctors) || doctors.length === 0) {
-      toast.error('No doctors data to export');
+      toast.error(TOAST_MESSAGES.NO_DATA_TO_EXPORT);
       return;
     }
     const headers = ['ID', 'Name', 'Specialty', 'Email', 'Phone', 'License', 'Registration Date', 'Status', 'Approval', 'Rating'];

@@ -56,7 +56,7 @@ export const NotificationDropdown = () => {
       const response = await notificationService.getAll({ limit: 10, page: 1 });
       setNotifications(response.data.data || []);
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      // Error handled by empty state
     } finally {
       setLoading(false);
     }
@@ -67,7 +67,7 @@ export const NotificationDropdown = () => {
       const response = await notificationService.getUnreadCount();
       setUnreadCount(response.data.count || 0);
     } catch (error) {
-      console.error('Error fetching unread count:', error);
+      // Error handled by default value (0)
     }
   };
 
@@ -81,7 +81,7 @@ export const NotificationDropdown = () => {
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      // Error handled silently - UI state unchanged
     }
   };
 
@@ -91,7 +91,7 @@ export const NotificationDropdown = () => {
       setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })));
       setUnreadCount(0);
     } catch (error) {
-      console.error('Error marking all as read:', error);
+      // Error handled silently - UI state unchanged
     }
   };
 
@@ -104,7 +104,7 @@ export const NotificationDropdown = () => {
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
     } catch (error) {
-      console.error('Error deleting notification:', error);
+      // Error handled silently - UI state unchanged
     }
   };
 

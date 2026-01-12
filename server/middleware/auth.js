@@ -18,7 +18,8 @@ export const protect = async (req, res, next) => {
     if (!token) {
       // Debug logging in development
       if (process.env.NODE_ENV === 'development') {
-        console.log('Auth Debug - No token found. Headers:', {
+        // No token found - proceeding with request (will be rejected by protect middleware)
+        // Debug logging removed
           authorization: req.headers.authorization,
           Authorization: req.headers.Authorization,
           allHeaders: Object.keys(req.headers)

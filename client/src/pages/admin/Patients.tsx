@@ -137,7 +137,6 @@ export default function Patients() {
       }
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_PATIENTS_FAILED);
-      console.error('Error fetching patients:', error);
       setPatients([]); // Set empty array on error
     } finally {
       setLoading(false);
@@ -229,7 +228,7 @@ export default function Patients() {
         lastName: patientData.userId?.lastName || '',
         email: patientData.userId?.email || '',
         phone: patientData.userId?.phone || '',
-        dateOfBirth: patientData.userId?.dateOfBirth ? format(new Date(patientData.userId.dateOfBirth), 'yyyy-MM-dd') : '',
+        dateOfBirth: patientData.userId?.dateOfBirth ? format(new Date(patientData.userId.dateOfBirth), DATE_FORMATS.API) : '',
         gender: patientData.userId?.gender || '',
         address: {
           street: patientData.userId?.address?.street || '',
@@ -259,7 +258,7 @@ export default function Patients() {
       
       setShowUpdateModal(true);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to load patient details');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.LOADING_PATIENT_DETAILS_FAILED);
     }
   };
 
@@ -294,13 +293,13 @@ export default function Patients() {
       };
 
       await adminService.updatePatient(updatingPatient._id, updateData);
-      toast.success('Patient profile updated successfully');
+      toast.success(TOAST_MESSAGES.PATIENT_PROFILE_UPDATED_SUCCESS);
       setShowUpdateModal(false);
       setUpdatingPatient(null);
       setFormData({});
       fetchPatients();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to update patient profile');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.PATIENT_PROFILE_UPDATE_FAILED);
     } finally {
       setIsUpdating(false);
     }
@@ -308,7 +307,7 @@ export default function Patients() {
 
   const exportToCSV = () => {
     if (!Array.isArray(patients) || patients.length === 0) {
-      toast.error('No patients data to export');
+      toast.error(TOAST_MESSAGES.NO_DATA_TO_EXPORT);
       return;
     }
     const headers = ['ID', 'Name', 'Email', 'Phone', 'Registration Date', 'Status', 'Total Appointments'];
@@ -339,7 +338,7 @@ export default function Patients() {
 
   const exportToPDFHandler = () => {
     if (!Array.isArray(patients) || patients.length === 0) {
-      toast.error('No patients data to export');
+      toast.error(TOAST_MESSAGES.NO_DATA_TO_EXPORT);
       return;
     }
     const headers = ['ID', 'Name', 'Email', 'Phone', 'Registration Date', 'Status', 'Total Appointments'];

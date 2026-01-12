@@ -97,7 +97,6 @@ export default function Reports() {
       setCancellationAnalysis(cancellationResponse.data);
       setNoShowAnalysis(noShowResponse.data);
     } catch (error) {
-      console.error('Error fetching reports:', error);
       toast.error(TOAST_MESSAGES.LOADING_REPORTS_FAILED);
     } finally {
       setLoading(false);

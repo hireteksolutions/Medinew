@@ -12,6 +12,7 @@ import { DOCTOR_MESSAGES, APPOINTMENT_MESSAGES, AUTH_MESSAGES } from '../constan
 import { getPaginationParams, buildPaginationMeta, applyPagination } from '../utils/pagination.js';
 import { createAuditLog } from '../utils/auditLogger.js';
 import { createAppointmentNotification, createBulkNotifications } from '../utils/notificationService.js';
+import { normalizeDate, isToday, isPastDate } from '../utils/dateUtils.js';
 
 // ============================================
 // PROFILE MANAGEMENT
@@ -417,13 +418,12 @@ export const markTimeSlotUnavailable = async (req, res) => {
     if (isNaN(selectedDate.getTime())) {
       return res.status(400).json({ 
         success: false,
-        message: 'Invalid date format' 
+        message: APPOINTMENT_MESSAGES.INVALID_DATE_FORMAT
       });
     }
 
     // Normalize date to start of day for comparison
-    const normalizedDate = new Date(selectedDate);
-    normalizedDate.setHours(0, 0, 0, 0);
+    const normalizedDate = normalizeDate(selectedDate);
     const dateStr = normalizedDate.toISOString().split('T')[0];
 
     // Validate time format (HH:MM)
@@ -431,13 +431,12 @@ export const markTimeSlotUnavailable = async (req, res) => {
     if (!timeRegex.test(timeSlot.start) || !timeRegex.test(timeSlot.end)) {
       return res.status(400).json({ 
         success: false,
-        message: 'Invalid time format. Use HH:MM format (e.g., 09:00, 14:30)' 
+        message: APPOINTMENT_MESSAGES.INVALID_TIME_FORMAT
       });
     }
 
     // Check if the slot time has passed for today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = normalizeDate(new Date());
     const todayStr = today.toISOString().split('T')[0];
 
     if (dateStr === todayStr) {
@@ -451,20 +450,20 @@ export const markTimeSlotUnavailable = async (req, res) => {
       if (slotMinutes <= currentMinutes) {
         return res.status(400).json({ 
           success: false,
-          message: 'Cannot block past time slots. Please select a future time slot.' 
+          message: APPOINTMENT_MESSAGES.CANNOT_BLOCK_PAST_TIME_SLOT
         });
       }
-    } else if (normalizedDate < today) {
+    } else if (isPastDate(normalizedDate)) {
       // It's a past date
       return res.status(400).json({ 
         success: false,
-        message: 'Cannot block slots for past dates. Please select a current or future date.' 
+        message: APPOINTMENT_MESSAGES.CANNOT_BLOCK_PAST_DATE
       });
     }
 
     // Check if this exact time slot is already blocked
     const existingBlocked = (doctor.blockedTimeSlots || []).find(blocked => {
-      const blockedDateStr = new Date(blocked.date).toISOString().split('T')[0];
+      const blockedDateStr = normalizeDate(blocked.date).toISOString().split('T')[0];
       return blockedDateStr === dateStr && 
              blocked.timeSlot.start === timeSlot.start && 
              blocked.timeSlot.end === timeSlot.end;
@@ -473,7 +472,7 @@ export const markTimeSlotUnavailable = async (req, res) => {
     if (existingBlocked) {
       return res.status(400).json({ 
         success: false,
-        message: 'This time slot is already marked as unavailable' 
+        message: APPOINTMENT_MESSAGES.TIME_SLOT_ALREADY_BLOCKED
       });
     }
 
@@ -493,8 +492,7 @@ export const markTimeSlotUnavailable = async (req, res) => {
     await doctor.save();
 
     // Find appointments at this specific time slot
-    const appointmentDateStart = new Date(normalizedDate);
-    appointmentDateStart.setHours(0, 0, 0, 0);
+    const appointmentDateStart = normalizeDate(normalizedDate);
     const appointmentDateEnd = new Date(normalizedDate);
     appointmentDateEnd.setHours(23, 59, 59, 999);
 
@@ -721,9 +719,8 @@ export const unblockTimeSlot = async (req, res) => {
         unblockedSlotId: doctor.blockedTimeSlots[blockedSlotIndex]?._id
       },
       req
-    }).catch(err => {
-      // Log error but don't fail the request
-      console.error('Error creating audit log:', err);
+    }).catch(() => {
+      // Silently fail audit log - non-critical
     });
 
     return res.json({
@@ -737,7 +734,6 @@ export const unblockTimeSlot = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error unblocking time slot:', error);
     return res.status(500).json({ 
       success: false,
       message: error.message || 'An error occurred while unblocking the time slot' 
@@ -1276,7 +1272,9 @@ export const getAppointments = async (req, res) => {
         // Optionally update in database (async, don't wait)
         Appointment.findByIdAndUpdate(appointment._id, { 
           paymentStatus: PAYMENT_STATUSES.COMPLETED 
-        }).catch(err => console.error('Error updating paymentStatus:', err));
+        }).catch(() => {
+          // Silently fail payment status update - non-critical
+        });
       }
       
       return appointment;

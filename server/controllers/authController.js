@@ -44,7 +44,7 @@ export const register = async (req, res) => {
     // Admins must be created by existing admins through admin management endpoints
     if (role === USER_ROLES.ADMIN) {
       return res.status(HTTP_STATUS.FORBIDDEN).json({ 
-        message: 'Admin registration is not allowed through public registration. Please contact system administrator.' 
+        message: AUTH_MESSAGES.ADMIN_REGISTRATION_NOT_ALLOWED
       });
     }
 
@@ -305,20 +305,10 @@ export const login = async (req, res) => {
     // Decrypt password (if encrypted) - backward compatible with non-encrypted passwords
     const password = decryptPassword(encryptedPassword);
 
-    // Debug logging (remove in production)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Login attempt:', {
-        email: email,
-        encryptedPasswordLength: encryptedPassword?.length,
-        decryptedPasswordLength: password?.length,
-        passwordStartsWith: password?.substring(0, 3) + '...'
-      });
-    }
-
     // Sanitize and validate password (basic validation)
     if (typeof password !== 'string' || password.length < 6) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-        message: 'Invalid password format' 
+        message: AUTH_MESSAGES.INVALID_PASSWORD_FORMAT
       });
     }
 
@@ -352,15 +342,6 @@ export const login = async (req, res) => {
     // - We compare the plain text password from the request with the stored hash using bcrypt.compare
     const isMatch = await user.matchPassword(password);
     
-    // Debug logging (remove in production)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Password verification:', {
-        email: sanitizedEmail,
-        isMatch: isMatch,
-        decryptedPasswordLength: password?.length,
-        hasStoredPassword: !!user.password
-      });
-    }
     
     if (!isMatch) {
       // Log failed login attempt (wrong password)
@@ -543,10 +524,10 @@ export const getMe = async (req, res) => {
           // Generate signed URL for profile image (works for both public and private buckets)
           const signedUrl = await fileStorageService.generateSignedUrl(file._id.toString(), 3600 * 24); // 24 hours
           profileImageUrl = signedUrl;
-          console.log(`✅ Generated signed URL for profile image: ${user._id}`);
+          // Signed URL generated successfully
         }
       } catch (urlError) {
-        console.warn(`⚠️  Could not generate signed URL for profile image, using public URL: ${urlError.message}`);
+        // Using public URL as fallback
         // Use original URL as fallback (might work if bucket is public)
       }
     }
@@ -721,14 +702,11 @@ export const updateProfile = async (req, res) => {
             });
             
             if (oldFile && oldFile.storageKey) {
-              console.log(`🗑️  Removing profile image - deleting from bucket: ${oldFile.storageKey}`);
               // Use the deleteFile method which handles bucket deletion properly
               try {
                 await fileStorageService.initialize();
                 await fileStorageService.deleteFile(oldFile._id.toString(), user._id.toString());
-                console.log(`✅ Old profile image deleted from bucket and database`);
               } catch (deleteError) {
-                console.error('❌ Error deleting old profile image from bucket:', deleteError.message);
                 // If deleteFile fails, try direct deletion as fallback
                 try {
                   await fileStorageService.initialize();
@@ -743,19 +721,13 @@ export const updateProfile = async (req, res) => {
                   oldFile.isActive = false;
                   oldFile.deletedAt = new Date();
                   await oldFile.save();
-                  console.log(`✅ Old profile image deleted from bucket (fallback method)`);
                 } catch (fallbackError) {
-                  console.error('❌ Fallback deletion also failed:', fallbackError.message);
                   // Continue with profile update even if image deletion fails
                 }
               }
-            } else {
-              console.warn(`⚠️  Profile image file record not found in database for URL: ${oldProfileImage}`);
-              // If file record not found, still clear the profileImage field
             }
+            // If file record not found, still clear the profileImage field
           } catch (deleteError) {
-            // Log error but don't fail the profile update
-            console.error('❌ Error deleting old profile image:', deleteError.message);
             // Continue with profile update even if image deletion fails
           }
         }
@@ -779,14 +751,11 @@ export const updateProfile = async (req, res) => {
             });
             
             if (oldFile && oldFile.storageKey) {
-              console.log(`🗑️  Profile image changed - deleting old image from bucket: ${oldFile.storageKey}`);
               // Use the deleteFile method which handles bucket deletion properly
               try {
                 await fileStorageService.initialize();
                 await fileStorageService.deleteFile(oldFile._id.toString(), user._id.toString());
-                console.log(`✅ Old profile image deleted from bucket and database`);
               } catch (deleteError) {
-                console.error('❌ Error deleting old profile image from bucket:', deleteError.message);
                 // Fallback to direct deletion
                 try {
                   await fileStorageService.initialize();
@@ -800,14 +769,12 @@ export const updateProfile = async (req, res) => {
                   oldFile.isActive = false;
                   oldFile.deletedAt = new Date();
                   await oldFile.save();
-                  console.log(`✅ Old profile image deleted from bucket (fallback method)`);
                 } catch (fallbackError) {
-                  console.error('❌ Fallback deletion also failed:', fallbackError.message);
+                  // Continue with profile update even if image deletion fails
                 }
               }
             }
           } catch (deleteError) {
-            console.error('❌ Error deleting old profile image:', deleteError.message);
             // Continue with profile update even if image deletion fails
           }
         }

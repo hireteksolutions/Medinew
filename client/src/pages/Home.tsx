@@ -85,7 +85,6 @@ export default function Home() {
           const doctors = Array.isArray(response.data) ? response.data : [];
           setFeaturedDoctors(doctors);
         } catch (error) {
-          console.error('Error fetching featured doctors:', error);
           setFeaturedDoctors([]);
         } finally {
           setLoading(false);

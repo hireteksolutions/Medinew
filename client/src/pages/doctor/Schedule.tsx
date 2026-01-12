@@ -140,7 +140,6 @@ export default function Schedule() {
       setBlockedTimeSlots(blockedSlots);
       setModifiedDays(new Set());
     } catch (error: any) {
-      console.error('Error fetching schedule:', error);
       toast.error(error.response?.data?.message || 'Failed to load schedule');
       // Initialize with empty schedule if fetch fails
       const emptySchedule = DAYS_OF_WEEK.map(day => ({
@@ -620,23 +619,14 @@ export default function Schedule() {
           isAvailable: true // Always true since we filtered
         }));
       
-      console.log('Saving complete schedule:', JSON.stringify(scheduleToSave, null, 2));
-      console.log('Day being saved:', day);
-      
       const response = await doctorDashboardService.updateWeeklySchedule(scheduleToSave);
-      console.log('Save response:', response.data);
       
       // Refresh schedule from database to get the saved state
       const refreshResponse = await doctorDashboardService.getSchedule();
-      console.log('Refresh response:', refreshResponse.data);
       
       // Server returns { success: true, data: { weeklySchedule: [...], ... } }
       const refreshData = refreshResponse.data?.data || refreshResponse.data;
-      console.log('Refresh data:', refreshData);
-      console.log('Weekly schedule from refresh:', refreshData.weeklySchedule);
-      
       const savedSchedule = refreshData.weeklySchedule || [];
-      console.log('Saved schedule:', savedSchedule);
       
       // Update the weekly schedule with saved data
       const updatedSchedule: DayAvailability[] = DAYS_OF_WEEK.map(dayOfWeek => {
@@ -679,8 +669,6 @@ export default function Schedule() {
       
       toast.success(`${dayInfo?.label} schedule saved successfully!`);
     } catch (error: any) {
-      console.error('Error saving schedule:', error);
-      console.error('Error response:', error.response?.data);
       toast.error(error.response?.data?.message || `Failed to save ${dayInfo?.label} schedule`);
     } finally {
       setSavingDays(prev => {
@@ -1273,7 +1261,6 @@ export default function Schedule() {
                         
                         // Skip invalid dates
                         if (isNaN(slotDate.getTime())) {
-                          console.warn('Invalid date in blocked slot:', slot);
                           return null;
                         }
                         
@@ -1285,7 +1272,6 @@ export default function Schedule() {
                         
                         // Calculate duration - handle missing timeSlot gracefully
                         if (!slot.timeSlot || !slot.timeSlot.start || !slot.timeSlot.end) {
-                          console.warn('Missing timeSlot in blocked slot:', slot);
                           return null;
                         }
                         

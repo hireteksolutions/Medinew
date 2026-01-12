@@ -36,7 +36,7 @@ export default function Overview() {
       const response = await adminService.getStats();
       setStats(response.data);
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      // Error handled by empty state
     } finally {
       setLoading(false);
     }

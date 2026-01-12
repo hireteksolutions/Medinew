@@ -25,7 +25,7 @@ import {
   CreditCard,
   Languages
 } from 'lucide-react';
-import { getAppointmentStatusColor, APPOINTMENT_STATUSES, TOAST_MESSAGES, DATE_FORMATS } from '../../constants';
+import { APPOINTMENT_STATUSES, TOAST_MESSAGES, DATE_FORMATS } from '../../constants';
 import toast from 'react-hot-toast';
 import { exportToPDF } from '../../utils/exportUtils';
 import DatePickerComponent from '../../components/common/DatePicker';
@@ -147,7 +147,6 @@ export default function Appointments() {
       }
     } catch (error) {
       toast.error(TOAST_MESSAGES.LOADING_APPOINTMENTS_FAILED);
-      console.error('Error fetching appointments:', error);
     } finally {
       setLoading(false);
     }
@@ -215,8 +214,7 @@ export default function Appointments() {
         toast.error('No available slots for this date. Please select another date.');
       }
     } catch (error: any) {
-      console.error('Error fetching available slots:', error);
-      toast.error(error.response?.data?.message || 'Failed to fetch available slots');
+      toast.error(error.response?.data?.message || TOAST_MESSAGES.LOADING_AVAILABLE_SLOTS_FAILED);
       setAvailableSlots([]);
     } finally {
       setLoadingSlots(false);
@@ -244,7 +242,7 @@ export default function Appointments() {
 
   const handleReschedule = async () => {
     if (!reschedulingAppointment || !rescheduleDate || !selectedSlot) {
-      toast.error('Please select a date and time slot');
+      toast.error(TOAST_MESSAGES.RESCHEDULE_DATE_AND_SLOT_REQUIRED);
       return;
     }
 
@@ -259,7 +257,7 @@ export default function Appointments() {
         reason: rescheduleReason || undefined
       });
       
-      toast.success('Appointment rescheduled successfully');
+      toast.success(TOAST_MESSAGES.APPOINTMENT_RESCHEDULED_SUCCESS);
       setShowRescheduleModal(false);
       setReschedulingAppointment(null);
       setRescheduleDate(null);

@@ -45,7 +45,7 @@ export default function Contact() {
         const response = await contactInfoService.get();
         setContactInfo(response.data);
       } catch (error) {
-        console.error('Error fetching contact info:', error);
+        // Error handled by default values
         // Set default values if API fails
         setContactInfo({
           address: '123 Medical Street, Health City, HC 12345',
@@ -77,7 +77,6 @@ export default function Contact() {
     try {
       // TODO: Implement API call to send contact message
       // await contactService.sendMessage(data);
-      console.log('Contact form data:', data); // For development/debugging
       await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API call
       toast.success('Message sent successfully!');
       reset();

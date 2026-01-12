@@ -98,7 +98,6 @@ export default function MedicalRecords() {
         setPagination(response.data.pagination);
       }
     } catch (error: any) {
-      console.error('Error fetching records:', error);
       toast.error(error.response?.data?.message || 'Failed to load medical records');
     } finally {
       setLoading(false);
@@ -244,7 +243,6 @@ export default function MedicalRecords() {
       // Refresh records
       await fetchRecords();
     } catch (error: any) {
-      console.error('Error uploading record:', error);
       setUploadProgress('');
       
       const errorMessage = error.response?.data?.message || 'Failed to upload medical record';
@@ -297,8 +295,6 @@ export default function MedicalRecords() {
       // Refresh records
       await fetchRecords();
     } catch (error: any) {
-      console.error('Error deleting record:', error);
-      
       const errorMessage = error.response?.data?.message || 'Failed to delete medical record';
       toast.error(
         <div className="flex items-center space-x-2">
@@ -326,7 +322,6 @@ export default function MedicalRecords() {
         toast.error('File URL not available');
       }
     } catch (error: any) {
-      console.error('Error downloading file:', error);
       toast.error('Failed to download file. Please try again.');
     }
   };

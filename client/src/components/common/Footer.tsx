@@ -13,7 +13,6 @@ export const Footer = () => {
         const response = await contactInfoService.get();
         setContactInfo(response.data);
       } catch (error) {
-        console.error('Error fetching contact info:', error);
         // Set default values if API fails
         setContactInfo({
           address: '123 Medical Street, Health City, HC 12345',

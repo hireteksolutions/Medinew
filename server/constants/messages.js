@@ -19,7 +19,8 @@ export const AUTH_MESSAGES = {
   LICENSE_NUMBER_ALREADY_REGISTERED: 'License number is already registered',
   SPECIALIZATION_REQUIRED: 'Specialization is required for doctors',
   REGISTRATION_SUCCESS_PENDING_APPROVAL: 'Registration successful! Your account is pending admin approval. You will be able to login once approved.',
-  
+  ADMIN_REGISTRATION_NOT_ALLOWED: 'Admin registration is not allowed through public registration. Please contact system administrator.',
+  INVALID_PASSWORD_FORMAT: 'Invalid password format',
 };
 
 // Appointment Messages
@@ -36,6 +37,13 @@ export const APPOINTMENT_MESSAGES = {
   APPOINTMENT_RESCHEDULED_SUCCESSFULLY: 'Appointment rescheduled successfully',
   APPOINTMENT_UPDATED_SUCCESSFULLY: 'Appointment updated successfully',
   APPOINTMENT_RESCHEDULE_REQUESTED: 'Reschedule request submitted successfully. Admin has been notified.',
+  DATE_BLOCKED: 'This date is blocked. Please select another date.',
+  TIME_SLOT_BLOCKED: 'This time slot is blocked and not available for booking.',
+  INVALID_DATE_FORMAT: 'Invalid date format',
+  INVALID_TIME_FORMAT: 'Invalid time format. Use HH:MM format (e.g., 09:00, 14:30)',
+  CANNOT_BLOCK_PAST_TIME_SLOT: 'Cannot block past time slots. Please select a future time slot.',
+  CANNOT_BLOCK_PAST_DATE: 'Cannot block slots for past dates. Please select a current or future date.',
+  TIME_SLOT_ALREADY_BLOCKED: 'This time slot is already marked as unavailable',
 };
 
 // Doctor Messages

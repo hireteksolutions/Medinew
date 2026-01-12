@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Clock, User, FileText, ArrowRight, MapPin, Phone, Mail } from 'lucide-react';
+import { Calendar, Clock, FileText, ArrowRight } from 'lucide-react';
 import { patientService } from '../../services/api';
 import { useLoader } from '../../context/LoaderContext';
 import { format } from 'date-fns';
-import { APPOINTMENT_STATUSES, getAppointmentStatusColor, DASHBOARD_ROUTES } from '../../constants';
+import { APPOINTMENT_STATUSES, DASHBOARD_ROUTES } from '../../constants';
 import Badge from '../../components/common/Badge';
 import { getAppointmentBadgeVariant, toTitleCase } from '../../utils/badgeUtils';
 
@@ -39,12 +39,6 @@ export default function Overview() {
       const allAppointments = allAppointmentsRes.data?.appointments || (Array.isArray(allAppointmentsRes.data) ? allAppointmentsRes.data : []);
       const medicalRecords = recordsRes.data?.records || (Array.isArray(recordsRes.data) ? recordsRes.data : []);
 
-      console.log('Overview Data:', {
-        upcoming: upcomingAppointments.length,
-        total: allAppointments.length,
-        records: medicalRecords.length
-      });
-
       setUpcomingAppointments(upcomingAppointments.slice(0, 5));
       setStats({
         upcomingAppointments: upcomingAppointments.length,
@@ -52,8 +46,6 @@ export default function Overview() {
         medicalRecords: medicalRecords.length,
       });
     } catch (error: any) {
-      console.error('Error fetching overview data:', error);
-      console.error('Error details:', error.response?.data);
       // Set defaults on error
       setStats({
         upcomingAppointments: 0,

@@ -105,7 +105,6 @@ export default function ConsultationHistory() {
         setPagination(response.data.pagination);
       }
     } catch (error: any) {
-      console.error('Error fetching consultations:', error);
       toast.error(error.response?.data?.message || 'Failed to load consultation history');
     } finally {
       setLoading(false);

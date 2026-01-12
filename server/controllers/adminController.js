@@ -10,25 +10,7 @@ import { DOCTOR_MESSAGES, ADMIN_MESSAGES, AUTHZ_MESSAGES, PATIENT_MESSAGES, APPO
 import { getPaginationParams, buildPaginationMeta } from '../utils/pagination.js';
 import { createAppointmentNotification } from '../utils/notificationService.js';
 import { createAuditLog } from '../utils/auditLogger.js';
-
-// Helper function to get date ranges
-const getDateRanges = () => {
-  const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
-  
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - 7);
-  weekStart.setHours(0, 0, 0, 0);
-  
-  const monthStart = new Date();
-  monthStart.setMonth(monthStart.getMonth() - 1);
-  monthStart.setHours(0, 0, 0, 0);
-  
-  return { todayStart, todayEnd, weekStart, monthStart, now };
-};
+import { getDateRanges, normalizeDate } from '../utils/dateUtils.js';
 
 // @desc    Get comprehensive admin stats
 // @route   GET /api/admin/stats

@@ -201,7 +201,7 @@ export default function Register() {
       const specializationsList = Array.isArray(response.data) ? response.data : [];
       setSpecializations(specializationsList);
     } catch (error) {
-      console.error('Error fetching specializations:', error);
+      // Error handled by empty state
       setSpecializations([]);
     } finally {
       setLoadingSpecializations(false);

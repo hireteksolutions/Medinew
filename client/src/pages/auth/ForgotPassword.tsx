@@ -81,7 +81,6 @@ export default function ForgotPassword() {
       
       // In development, show the reset token if provided
       if (response.data?.resetToken && import.meta.env.DEV) {
-        console.log('Reset Token (dev only):', response.data.resetToken);
         toast.success(`Reset Token: ${response.data.resetToken}`, { duration: 10000 });
       }
       

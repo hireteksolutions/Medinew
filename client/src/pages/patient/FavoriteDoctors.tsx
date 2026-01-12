@@ -20,7 +20,6 @@ export default function FavoriteDoctors() {
       const doctorsData = response.data?.doctors || response.data || [];
       setDoctors(Array.isArray(doctorsData) ? doctorsData : []);
     } catch (error) {
-      console.error('Error fetching favorite doctors:', error);
       setDoctors([]); // Set empty array on error
     } finally {
       setLoading(false);

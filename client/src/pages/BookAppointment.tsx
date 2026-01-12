@@ -216,7 +216,7 @@ export default function BookAppointment() {
       const consultations = response.data?.consultations || response.data || [];
       setConsultationHistory(Array.isArray(consultations) ? consultations : []);
     } catch (error: any) {
-      console.error('Error fetching consultation history:', error);
+      // Error handled by empty state
     } finally {
       setLoadingHistory(false);
     }
@@ -235,7 +235,7 @@ export default function BookAppointment() {
         }
       }
     } catch (error) {
-      console.error('Error fetching consultation details:', error);
+      // Error handled silently - form will work without consultation details
     }
   };
 

@@ -33,7 +33,6 @@ export default function Profile() {
       const specializationsList = Array.isArray(response.data) ? response.data : [];
       setSpecializations(specializationsList);
     } catch (error) {
-      console.error('Error fetching specializations:', error);
       setSpecializations([]);
     } finally {
       setLoadingSpecializations(false);
@@ -78,7 +77,7 @@ export default function Profile() {
         setValue('address.longitude', userData.address.longitude || '');
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      // Error handled by empty state
     } finally {
       setLoading(false);
     }
@@ -125,7 +124,6 @@ export default function Profile() {
       }
       toast.success('Profile photo updated successfully!');
     } catch (error: any) {
-      console.error('Error uploading image:', error);
       toast.error(error.response?.data?.message || 'Failed to upload profile photo');
     } finally {
       setUploadingImage(false);
@@ -212,7 +210,6 @@ export default function Profile() {
       toast.success(TOAST_MESSAGES.PROFILE_UPDATED_SUCCESS);
       fetchProfile();
     } catch (error: any) {
-      console.error('Error updating profile:', error);
       toast.error(error.response?.data?.message || TOAST_MESSAGES.PROFILE_UPDATE_FAILED);
     }
   };

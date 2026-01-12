@@ -23,10 +23,7 @@ import {
 // Note: API_ROUTES already include /api prefix, so baseURL should not include it
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-// Log API URL in development (helps with debugging)
-if (import.meta.env.DEV) {
-  console.log(`🔗 Backend API URL: ${API_URL}`);
-}
+// API URL is set from environment variable or defaults to localhost
 
 const api = axios.create({
   baseURL: API_URL,
@@ -46,25 +43,10 @@ api.interceptors.request.use(
       // Also ensure it's in defaults for consistency
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      // Debug logging in development
-      if (import.meta.env.DEV && config.url?.includes('/admin')) {
-        console.log('API Request Debug:', {
-          url: config.url,
-          hasToken: !!token,
-          tokenLength: token.length,
-          tokenPreview: token.substring(0, 20) + '...',
-          authHeader: config.headers.Authorization?.substring(0, 30) + '...'
-        });
-      }
     } else {
       // Remove Authorization header if no token
       delete config.headers.Authorization;
       delete api.defaults.headers.common['Authorization'];
-      
-      // Debug logging in development
-      if (import.meta.env.DEV && config.url?.includes('/admin')) {
-        console.warn('API Request Debug - No token found for:', config.url);
-      }
     }
     return config;
   },

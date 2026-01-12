@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import { USER_ROLES, APPOINTMENT_STATUSES, DEFAULT_APPOINTMENT_STATUS, HTTP_STATUS } from '../constants/index.js';
 import { APPOINTMENT_MESSAGES, DOCTOR_MESSAGES, AUTHZ_MESSAGES } from '../constants/messages.js';
 import { createAuditLog } from '../utils/auditLogger.js';
+import { normalizeDate, isToday } from '../utils/dateUtils.js';
 
 // @desc    Get available slots for a doctor
 // @route   GET /api/appointments/available-slots/:doctorId
@@ -26,13 +27,11 @@ export const getAvailableSlots = async (req, res) => {
     const dayName = selectedDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     
     // Normalize selected date to start of day for comparison
-    const normalizedSelectedDate = new Date(selectedDate);
-    normalizedSelectedDate.setHours(0, 0, 0, 0);
+    const normalizedSelectedDate = normalizeDate(selectedDate);
 
     // Check if entire date is blocked (normalize both dates for comparison)
     const isDateBlocked = (doctor.blockedDates || []).some(blockedDate => {
-      const normalizedBlockedDate = new Date(blockedDate);
-      normalizedBlockedDate.setHours(0, 0, 0, 0);
+      const normalizedBlockedDate = normalizeDate(blockedDate);
       return normalizedBlockedDate.getTime() === normalizedSelectedDate.getTime();
     });
 
@@ -43,8 +42,7 @@ export const getAvailableSlots = async (req, res) => {
     // Get blocked time slots for this specific date
     const dateStr = normalizedSelectedDate.toISOString().split('T')[0];
     const blockedTimeSlots = (doctor.blockedTimeSlots || []).filter(blocked => {
-      const blockedDate = new Date(blocked.date);
-      blockedDate.setHours(0, 0, 0, 0);
+      const blockedDate = normalizeDate(blocked.date);
       const blockedDateStr = blockedDate.toISOString().split('T')[0];
       return blockedDateStr === dateStr;
     });
@@ -56,8 +54,7 @@ export const getAvailableSlots = async (req, res) => {
     }
 
     // Get existing appointments for the date
-    const appointmentDateStart = new Date(selectedDate);
-    appointmentDateStart.setHours(0, 0, 0, 0);
+    const appointmentDateStart = normalizeDate(selectedDate);
     const appointmentDateEnd = new Date(selectedDate);
     appointmentDateEnd.setHours(23, 59, 59, 999);
     
@@ -91,11 +88,9 @@ export const getAvailableSlots = async (req, res) => {
       }));
 
     // Filter out past time slots if the selected date is today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isToday = normalizedSelectedDate.getTime() === today.getTime();
+    const isSelectedDateToday = isToday(normalizedSelectedDate);
     
-    if (isToday) {
+    if (isSelectedDateToday) {
       const currentTime = new Date();
       const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes(); // Current time in minutes
       availableSlots = availableSlots.filter(slot => {
@@ -147,35 +142,32 @@ export const createAppointment = async (req, res) => {
 
     // Check if the entire date is blocked
     const selectedDate = new Date(appointmentDate);
-    const normalizedDate = new Date(selectedDate);
-    normalizedDate.setHours(0, 0, 0, 0);
+    const normalizedDate = normalizeDate(selectedDate);
     
     const isDateBlocked = (doctor.blockedDates || []).some(blockedDate => {
-      const blockedDateNormalized = new Date(blockedDate);
-      blockedDateNormalized.setHours(0, 0, 0, 0);
+      const blockedDateNormalized = normalizeDate(blockedDate);
       return blockedDateNormalized.getTime() === normalizedDate.getTime();
     });
 
     if (isDateBlocked) {
-      return res.status(400).json({ message: 'This date is blocked. Please select another date.' });
+      return res.status(400).json({ message: APPOINTMENT_MESSAGES.DATE_BLOCKED });
     }
 
     // Check if the specific time slot is blocked
     const dateStr = normalizedDate.toISOString().split('T')[0];
     const isTimeSlotBlocked = (doctor.blockedTimeSlots || []).some(blocked => {
-      const blockedDateStr = new Date(blocked.date).toISOString().split('T')[0];
+      const blockedDateStr = normalizeDate(blocked.date).toISOString().split('T')[0];
       return blockedDateStr === dateStr &&
              blocked.timeSlot.start === timeSlot.start &&
              blocked.timeSlot.end === timeSlot.end;
     });
 
     if (isTimeSlotBlocked) {
-      return res.status(400).json({ message: 'This time slot is blocked and not available for booking.' });
+      return res.status(400).json({ message: APPOINTMENT_MESSAGES.TIME_SLOT_BLOCKED });
     }
 
     // Check if slot is already booked by another appointment
-    const appointmentDateStart = new Date(selectedDate);
-    appointmentDateStart.setHours(0, 0, 0, 0);
+    const appointmentDateStart = normalizeDate(selectedDate);
     const appointmentDateEnd = new Date(selectedDate);
     appointmentDateEnd.setHours(23, 59, 59, 999);
     
@@ -364,8 +356,7 @@ export const rescheduleAppointment = async (req, res) => {
     // Check if new slot is available
     if (appointmentDate && timeSlot) {
       const selectedDate = new Date(appointmentDate);
-      const normalizedDate = new Date(selectedDate);
-      normalizedDate.setHours(0, 0, 0, 0);
+      const normalizedDate = normalizeDate(selectedDate);
 
       // Get doctor to check blocked dates and time slots
       const doctor = await Doctor.findOne({ userId: appointment.doctorId });
@@ -375,31 +366,29 @@ export const rescheduleAppointment = async (req, res) => {
 
       // Check if the entire date is blocked
       const isDateBlocked = (doctor.blockedDates || []).some(blockedDate => {
-        const blockedDateNormalized = new Date(blockedDate);
-        blockedDateNormalized.setHours(0, 0, 0, 0);
+        const blockedDateNormalized = normalizeDate(blockedDate);
         return blockedDateNormalized.getTime() === normalizedDate.getTime();
       });
 
       if (isDateBlocked) {
-        return res.status(400).json({ message: 'This date is blocked. Please select another date.' });
+        return res.status(400).json({ message: APPOINTMENT_MESSAGES.DATE_BLOCKED });
       }
 
       // Check if the specific time slot is blocked
       const dateStr = normalizedDate.toISOString().split('T')[0];
       const isTimeSlotBlocked = (doctor.blockedTimeSlots || []).some(blocked => {
-        const blockedDateStr = new Date(blocked.date).toISOString().split('T')[0];
+        const blockedDateStr = normalizeDate(blocked.date).toISOString().split('T')[0];
         return blockedDateStr === dateStr &&
                blocked.timeSlot.start === timeSlot.start &&
                blocked.timeSlot.end === timeSlot.end;
       });
 
       if (isTimeSlotBlocked) {
-        return res.status(400).json({ message: 'This time slot is blocked and not available for booking.' });
+        return res.status(400).json({ message: APPOINTMENT_MESSAGES.TIME_SLOT_BLOCKED });
       }
 
       // Check if slot is already booked by another appointment
-      const appointmentDateStart = new Date(selectedDate);
-      appointmentDateStart.setHours(0, 0, 0, 0);
+      const appointmentDateStart = normalizeDate(selectedDate);
       const appointmentDateEnd = new Date(selectedDate);
       appointmentDateEnd.setHours(23, 59, 59, 999);
       

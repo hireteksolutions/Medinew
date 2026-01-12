@@ -25,7 +25,6 @@ export const encryptPassword = (password: string): string => {
     const encrypted = CryptoJS.AES.encrypt(password, ENCRYPTION_KEY).toString();
     return encrypted;
   } catch (error) {
-    console.error('Password encryption error:', error);
     // If encryption fails, return original password (should not happen, but fail gracefully)
     return password;
   }
@@ -41,7 +40,6 @@ export const decryptPassword = (encryptedPassword: string): string => {
     const decrypted = CryptoJS.AES.decrypt(encryptedPassword, ENCRYPTION_KEY);
     return decrypted.toString(CryptoJS.enc.Utf8);
   } catch (error) {
-    console.error('Password decryption error:', error);
     throw new Error('Failed to decrypt password');
   }
 };
